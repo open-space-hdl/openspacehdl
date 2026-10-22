@@ -329,10 +329,11 @@ the reason, when:
     .openspacehdl/project.json    manifest of the generated files
 ```
 
-The files fall into three classes:
+The files fall into four classes:
 
 | Class | Written by | Changed by `update` |
 | --- | --- | --- |
+| Input | the Composer: the saved file and its export, copied byte for byte | replaced by `update --from` with a new save and its export |
 | Generated | `new` and `update` | yes, unless edited (section 6.4) |
 | Seed | `new` only | never |
 | User | the integrator | never; the package does not know them |
@@ -342,6 +343,12 @@ the guard that gives every GHDL simulation its own `sim_flags`, because VUnit 5.
 generics from one configuration into the next.
 
 ### 6.3 Generated testbench
+
+The generator is built in two steps. The first step generates the harness with the system, a clock per clock port
+(the period derived from the frequency of its clock domain, `1 sec / <Hz>`), the reset from the testbench
+(`osh_reset`, 16 cycles of the slowest clock) and every input of the external interfaces held idle; its smoke test
+resets the system and lets it run on its clocks. The second step adds the bench components and the register checks
+below.
 
 The harness `<system>_th.vhd` instantiates the system and, for every external port of `resolved.ports`:
 
@@ -386,9 +393,13 @@ only through a link (for example the reference system spfi_encrypt) need the far
 
 ### 6.4 update
 
-`.openspacehdl/project.json` records the package version, the lock, the SHA-256 of the saved file and, per generated
-file, its path and the SHA-256 of the text the package wrote. `openspacehdl update [<dir>]` reads the saved file and
-the export again, runs the checks of section 6.1 and regenerates every generated file:
+`.openspacehdl/project.json` records the package version, the lock, the SHA-256 of every input (the saved file and the
+files of its export) and, per generated file, its path and the SHA-256 of the text the package generated last, also
+when that text went to `<file>.new`: taking over `<file>.new` makes the file unchanged for the next `update`. The
+integrator saves a changed system over the project's file and exports into `hdl/`, or hands the new save and its export
+to `openspacehdl update --from <file> [--hdl <dir>]`, which copies them into the project first; an export file of
+before that the new export no longer has is removed when it is unchanged. `openspacehdl update [<dir>]` then reads
+the saved file and the export, runs the checks of section 6.1 and regenerates every generated file:
 
 | State of the file on disk | Action |
 | --- | --- |
@@ -396,6 +407,7 @@ the export again, runs the checks of section 6.1 and regenerates every generated
 | Edited by the integrator | Left as it is; the new text goes to `<file>.new`, and `update` lists the file and exits with status 1. |
 | Deleted | Not written again; `update` lists it. `--restore` writes it. |
 | Not generated any more (an interface removed) | Deleted when unchanged, otherwise left and listed. |
+| A file of the integrator where a new generated file belongs | Left as it is; the new text goes to `<file>.new`, as for an edited file. |
 
 Seed files and user files are never touched. `update --dry-run` lists the actions without writing. Running `update`
 right after `new` changes nothing, and a second `update` after a change of the system changes nothing more.
@@ -426,7 +438,7 @@ Seed:
 ```
 
 The files of the Composer export in `hdl/` keep the header the Composer wrote and are copied byte for byte, because
-`new` and `update` check them against the saved file; the project manifest records them as generated.
+`new` and `update` check them against the saved file; the project manifest records them as inputs.
 
 ## 7. export
 

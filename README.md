@@ -55,6 +55,11 @@ add itself.
 `openspacehdl export <dir>` writes the sources as a plain tree; `openspacehdl export <dir> --git` writes them as Git
 repositories with their history up to the pinned releases, without network.
 
+`openspacehdl new <system>.composer.json [<dir>]` writes a project for a system saved by the Open Space Composer and
+its export: the inputs, a VUnit simulation (`sim/run.py`, calling `openspacehdl.add_system`) and a system testbench
+with its harness. `openspacehdl update` regenerates the generated files after a change of the system and never
+overwrites a file the integrator changed.
+
 ## Development
 
 The design of the next phase is in [docs/design.md](docs/design.md).

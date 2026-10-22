@@ -1,0 +1,34 @@
+$header
+"""VUnit simulation of the system $entity.
+
+    python sim/run.py [VUnit options]      for example: python sim/run.py -p 2
+
+openspacehdl.add_system adds the sources of the system from the installed openspacehdl (the cores, Open Logic FT and
+the simulation models of the vendor adapters at the versions of its lock manifest), the UVVM components and the
+files of sim/tb/. GHDL is the default simulator. This file is yours: add options, configurations and test benches.
+"""
+
+import os
+import sys
+from pathlib import Path
+
+os.environ.setdefault("VUNIT_SIMULATOR", "ghdl")
+
+from vunit import VUnit  # noqa: E402  (import after the simulator selection)
+
+import openspacehdl as osh  # noqa: E402
+
+PROJECT = Path(__file__).resolve().parent.parent
+
+osh.guard_ghdl_generics()
+try:
+    vu = VUnit.from_argv(compile_builtins=False)
+except TypeError:  # VUnit 5 has no compile_builtins
+    vu = VUnit.from_argv()
+vu.add_vhdl_builtins()
+osh.add_system(vu, PROJECT)
+# UVVM needs -frelaxed at elaboration in GHDL; large arrays need an unlimited stack
+vu.set_sim_option("ghdl.elab_flags", ["-frelaxed"])
+vu.set_sim_option("ghdl.sim_flags", ["--max-stack-alloc=0"])
+vu.set_sim_option("disable_ieee_warnings", True)
+vu.main()

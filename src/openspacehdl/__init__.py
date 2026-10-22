@@ -8,7 +8,9 @@ from openspacehdl.vunit import (  # noqa: E402
     OpenLogicConflictError,
     UnknownCoreError,
     add_core,
+    add_system,
     add_uvvm,
+    guard_ghdl_generics,
 )
 
 __all__ = [
@@ -19,5 +21,7 @@ __all__ = [
     "UnknownCoreError",
     "__version__",
     "add_core",
+    "add_system",
     "add_uvvm",
+    "guard_ghdl_generics",
 ]

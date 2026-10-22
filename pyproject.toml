@@ -38,7 +38,7 @@ openspacehdl = "openspacehdl.cli:main"
 version = { attr = "openspacehdl.__version__" }
 
 [tool.setuptools.package-data]
-openspacehdl = ["data/*.json", "licenses/*", "hdl/**/*", "bundles/*.bundle"]
+openspacehdl = ["data/*.json", "licenses/*", "templates/*", "hdl/**/*", "bundles/*.bundle"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

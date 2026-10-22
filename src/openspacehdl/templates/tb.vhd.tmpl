@@ -1,0 +1,38 @@
+$header
+library ieee;
+    use ieee.std_logic_1164.all;
+
+library vunit_lib;
+    context vunit_lib.vunit_context;
+
+use work.${entity}_th_pkg.all;
+
+-- System testbench of the system
+--   $entity
+-- with its harness ${entity}_th and the test cases. This file is yours: openspacehdl update regenerates the
+-- harness and its package, never this file.
+entity ${entity}_tb is
+    generic (
+        runner_cfg : string
+    );
+end entity ${entity}_tb;
+
+architecture sim of ${entity}_tb is
+begin
+
+    i_harness : entity work.${entity}_th;
+
+    p_main : process
+    begin
+        test_runner_setup(runner, runner_cfg);
+        while test_suite loop
+            if run("test_smoke") then
+                -- Reset, then let the system run on its clocks
+                osh_reset(osh_rst);
+                wait for 100 * C_SLOWEST_PERIOD;
+            end if;
+        end loop;
+        test_runner_cleanup(runner);
+    end process;
+
+end architecture sim;
