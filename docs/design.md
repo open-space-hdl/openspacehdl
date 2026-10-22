@@ -108,6 +108,8 @@ The build of the package stops with an error when one of these rules fails:
 | L4 | The website commit of the manifest equals `tools/composer_ref.txt` of the reference-systems release. |
 | L5 | A core enters the manifest only when its card on the website is public and it is a source of the catalog. |
 | L6 | The hashes in `files` match the files of the snapshots in the wheel. |
+| L7 | The licence files of every snapshot repository are in the wheel, listed in `license-files`, and their licence is named in the licence expression of the wheel (section 4.4). |
+| L8 | The longest path in the wheel stays within the path budget of section 4.5. |
 
 The `verifiedWith` tag of a core may differ from the Open Logic tag of the manifest: the reference systems are
 verified with that tag. `openspacehdl lock` and `add_core` show both.
@@ -127,12 +129,16 @@ openspacehdl/
     data/lock.json, data/family.json
     data/schema/system-1.json, system-2.json      Composer schemas at the website commit of the lock
     templates/                          templates of the generated project (MIT)
-    hdl/<repository>/...                source snapshots of the cores, Open Logic FT and reference-systems
+    hdl/<id>/...                        source snapshots of the cores, Open Logic FT and reference-systems
     hdl/uvvm/...                        UVVM components of the system testbenches, with UVVM's licence
     hdl/osh_tb/...                      bench components of the package (MIT)
     portal/                             website, documentation sites, Composer (see 4.3)
     bundles/<repository>.bundle         Git bundles (see 4.3)
 ```
+
+The directory of a snapshot is the id of its repository in the lock manifest: `openwire`, `openrmap`, `openspp`,
+`openfibre`, `opencrypto`, `opencompact`, `olo` for Open Logic FT and `refsys` for reference-systems. The short names
+keep the paths within the budget of section 4.5.
 
 The package finds its files with `importlib.resources`; pip installs a wheel unpacked, so every file has a path that
 VUnit and the simulators can read. The file walk of the build takes only the listed files: no `.git` directories, no
@@ -180,6 +186,48 @@ The design therefore uses three distributions with the same version, each pinned
 
 `pip install openspacehdl[offline]` installs all three; `openspacehdl serve` and `openspacehdl export --git` name the
 missing distribution when it is not installed. This split is open point O1.
+
+### 4.4 Licences
+
+The wheel carries content under three licences:
+
+| Content | Licence | Licence files |
+| --- | --- | --- |
+| Package code and the templates of generated projects | MIT | `LICENSE` |
+| Cores, Open Logic FT, reference-systems | PSI HDL Library License 1.0 | `License.txt` and `LGPL2_1.txt` of each repository |
+| `en_cl_fix`, submodule of Open Logic FT | MIT | `LICENSE.md` |
+| UVVM components | Apache License 2.0 | `LICENSE` of UVVM |
+
+The PSI HDL Library License has no SPDX identifier, so the expression names it with a `LicenseRef`:
+
+```toml
+license = "MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0"
+license-files = [
+    "LICENSE",
+    "src/openspacehdl/hdl/*/License.txt",
+    "src/openspacehdl/hdl/*/LGPL2_1.txt",
+    "src/openspacehdl/hdl/olo/3rdParty/en_cl_fix/LICENSE.md",
+    "src/openspacehdl/hdl/uvvm/LICENSE",
+]
+```
+
+A trial build with this form passes: setuptools accepts the expression (`packaging.licenses` validates it), writes
+one `License-File` entry per file into the metadata and copies the files to `.dist-info/licenses/`, and
+`twine check --strict` passes. Rule L7 keeps the expression and the files complete when a repository is added. The
+same rule applies to `openspacehdl-portal` and `openspacehdl-bundles` with the licences of their content (open point
+O7).
+
+### 4.5 Path length
+
+Windows limits a path to 260 characters unless long paths are enabled, and GHDL and other tools fail beyond it. A
+wheel installs below `site-packages`, which is already long: about 70 characters for a per-user Python on
+Windows, more in a virtual environment inside a project. The build therefore allows an install prefix of 120 characters and checks
+that the longest path in the wheel stays below 260 minus 120, that is at most 139 characters (rule L8).
+
+With the repository names as directories, the longest path at the current pins would be 134 characters, a constraint
+file of a reference system:
+`openspacehdl/hdl/reference-systems/systems/spfi_compress_encrypt/targets/vck190/constr/...`. With the ids of
+section 4.1 it is 123 characters. The paths in `.dist-info/licenses/` are below 100 characters.
 
 ## 5. add_core
 
@@ -330,6 +378,34 @@ the export again, runs the checks of section 6.1 and regenerates every generated
 Seed files and user files are never touched. `update --dry-run` lists the actions without writing. Running `update`
 right after `new` changes nothing, and a second `update` after a change of the system changes nothing more.
 
+### 6.5 File headers
+
+Every generated and seed file starts with a comment that names the package version, the lock and the class of the
+file. A generated file of the package carries the MIT notice of the templates (the copyright line and the permission
+notice of `LICENSE`). A seed file carries no licence notice: it belongs to the integrator from the start.
+
+Generated (VHDL; Python files use `#`):
+
+```vhdl
+-- Generated by openspacehdl 0.1.0 from spfi_encrypt.composer.json
+-- Lock: website 1b3d619cb4, reference-systems v0.1.1
+-- Class: generated. Regenerated by openspacehdl update; edits are kept and reported.
+--
+-- Copyright (c) 2026 Julian Schneider
+-- Permission is hereby granted, free of charge, to any person obtaining a copy ... (MIT License, full text)
+```
+
+Seed:
+
+```vhdl
+-- Written by openspacehdl 0.1.0 from spfi_encrypt.composer.json
+-- Lock: website 1b3d619cb4, reference-systems v0.1.1
+-- Class: seed. Written once by openspacehdl new; openspacehdl update never changes it.
+```
+
+The files of the Composer export in `hdl/` keep the header the Composer wrote and are copied byte for byte, because
+`new` and `update` check them against the saved file; the project manifest records them as generated.
+
 ## 7. export
 
 - `openspacehdl export <dir> [--core <core> ...]` writes the source snapshots as a plain tree:
@@ -368,7 +444,8 @@ each documentation site with MkDocs from `tools/docs` of the core at its tag.
 | Cores | `add_core` of every core, alone and all in one project, compiles in GHDL | GHDL through VUnit |
 | Systems | Every example of the Composer (seven at the website commit of the lock) and the systems of the reference-systems release: `new`, then `python sim/run.py`, the smoke test passes; `update` right after `new` changes nothing | GHDL through VUnit |
 | Exports | The exports of the examples come from `tools/composer_hdl.mjs` of the website at the commit of the lock; the CI checks with it that the stored exports are current (exit status 0) | Node.js, CI only |
-| Wheel | Build of wheel and sdist, `twine check --strict`, install without network into fresh environments on Python 3.10 and 3.14, the commands run | pip, twine |
+| Wheel | Build of wheel and sdist with the rules L7 (licences) and L8 (path budget), `twine check --strict`, install without network into fresh environments on Python 3.10 and 3.14, the commands run | pip, twine |
+| Deep install | On Windows, an install into a virtual environment whose `site-packages` path is 120 characters long; from there `add_core` of every core compiles in GHDL and one system passes its smoke test | pip, GHDL |
 | VUnit versions | The core and system levels with VUnit 4.7.1 and with VUnit 5.0 | VUnit |
 
 The tests run on Windows and Linux. Phase A is complete when every level passes.
@@ -389,11 +466,12 @@ The tests run on Windows and Linux. Phase A is complete when every level passes.
 
 ## 11. Open points
 
-| ID | Point | Proposal |
+| ID | Point | State |
 | --- | --- | --- |
-| O1 | Distributions: one wheel or three (section 4.3). The two further names on PyPI are claimed with their first upload. | Three distributions. |
-| O2 | The first version with content needs a consistent set. With website 1b3d619 and reference-systems v0.1.0, rule L2 fails for OpenCompact (catalog v0.1.1, reference-systems v0.1.0), and v0.1.0 has no `tools/composer_ref.txt` (rule L4). | Build the first version with content on the next reference-systems release that carries the catalog pins. |
-| O3 | `resolved.version` of the Composer is decided but not yet written into saved files. | Validate against the schema and record the tested generator versions until it exists; then refuse an unknown version. |
-| O4 | Which virtual channel of a SpaceFibre link carries the RMAP target. | Trace it in the resolved netlist from the target to the port; `new` refuses when it cannot. |
-| O5 | The documentation sites are built at the tags of the cores, with their own MkDocs toolchains. | Build every site in its own environment from `tools/docs` of the core at its tag. |
-| O6 | Linux tests while the repository is private and has no CI. | Run them locally in WSL until the CI exists. |
+| O1 | Distributions: one wheel or three (section 4.3). The cores and reference-systems are in the package either way: their source snapshots in `openspacehdl`, their full Git repositories in `openspacehdl-bundles`. The two further names on PyPI are claimed with their first upload. | Proposed: three distributions. Open. |
+| O2 | The first version with content needs a consistent set. With website 1b3d619 and reference-systems v0.1.0, rule L2 fails for OpenCompact (catalog v0.1.1, reference-systems v0.1.0), and v0.1.0 has no `tools/composer_ref.txt` (rule L4). | Decided: the first version with content is built on the next reference-systems release that carries the catalog pins. |
+| O3 | `resolved.version` of the Composer is decided but not yet written into saved files. | Decided: the Composer writes it from generator 0.9.8-beta on; the package refuses an unknown version. For files of older generators it validates against the schema and warns on a generator version it was not tested with. |
+| O4 | Which virtual channel of a SpaceFibre link carries the RMAP target. | Decided: traced in the resolved netlist from the target to the port; `new` refuses when it cannot. |
+| O5 | The documentation sites are built at the tags of the cores, with their own MkDocs toolchains. | Decided: every site is built in its own environment with the pinned requirements of `tools/docs` of the core at its tag. |
+| O6 | Linux tests while the repository is private and has no CI. | Decided: they run locally in WSL until the CI exists. |
+| O7 | The website repository has no licence file, so the licence of the website content and of the Composer in `openspacehdl-portal` is not stated. | Open: needs a licence for the website repository before the portal is published. |
