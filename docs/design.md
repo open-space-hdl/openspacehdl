@@ -102,7 +102,7 @@ The build of the package stops with an error when one of these rules fails:
 
 | Rule | Check |
 | --- | --- |
-| L1 | Every pinned commit of a core is the commit of a release tag `vX.Y.Z` of its repository. Consumers pin releases, never `develop`. |
+| L1 | Every pinned commit of a core is the commit of a release tag `vX.Y.Z` of its repository, and the tag is on the remote of the repository; the same holds for the tag of reference-systems. Consumers pin published releases, never `develop`. |
 | L2 | Every repository that both the catalog and reference-systems pin has the same commit in both. |
 | L3 | There is one Open Logic FT: the tag of the catalog's `olo` source equals the commit of `cores/open-logic-ft` of reference-systems. |
 | L4 | The website commit of the manifest equals `tools/composer_ref.txt` of the reference-systems release. |
@@ -111,6 +111,7 @@ The build of the package stops with an error when one of these rules fails:
 | L7 | The licence files of every snapshot repository are in the wheel, listed in `license-files`, and their licence is named in the licence expression of the wheel (section 4.4). |
 | L8 | The longest path in the wheel stays within the path budget of section 4.5. |
 | L9 | The wheel stays below the file size limit of the project on PyPI (section 4.3). |
+| L10 | Every core pins the same UVVM commit; it is the UVVM of the manifest. |
 
 The `verifiedWith` tag of a core may differ from the Open Logic tag of the manifest: the reference systems are
 verified with that tag. `openspacehdl lock` and `add_core` show both.
@@ -298,8 +299,9 @@ the reason, when:
 - the file fails the published schema of its `formatVersion` (system-1 or system-2, stored in the package);
 - the file has no `resolved` part, `resolved.problems` is not empty, or `checks` has an entry of severity `error`
   (the rule of Export HDL);
-- `resolved.version` is unknown to the package (once the Composer writes it; until then the package records the
-  generator versions it was tested with and warns on another one);
+- `resolved.version` is unknown to the package. The Composer writes it as the first key of `resolved` from generator
+  0.9.8-beta on (layout 1); a file without it has layout 1. For a file of a generator version the package was not
+  tested with, `new` warns;
 - the SHA-256 of the file differs from the one in the header of `<system>_compile_order.txt`: the export does not
   belong to the file;
 - a source of `resolved.compile` has another commit than the manifest. The message names the package version whose
@@ -484,7 +486,7 @@ The tests run on Windows and Linux. Phase A is complete when every level passes.
 | ID | Point | State |
 | --- | --- | --- |
 | O1 | Distributions: one wheel or three (section 4.3). | Decided: one wheel with the snapshots, the Git bundles and the portal; the bundles keep the history up to the pinned tag. |
-| O2 | The first version with content needs a consistent set. With website 1b3d619 and reference-systems v0.1.0, rule L2 fails for OpenCompact (catalog v0.1.1, reference-systems v0.1.0), and v0.1.0 has no `tools/composer_ref.txt` (rule L4). | Decided: the first version with content is built on the next reference-systems release that carries the catalog pins. |
+| O2 | The first version with content needs a consistent set. With website 3e0f04b and reference-systems v0.1.0, `tools/lock.py --report` finds rule L2 broken for OpenFibre and OpenCompact (catalog v0.1.1, reference-systems v0.1.0) and rule L4 broken (reference-systems v0.1.0 was checked against website f6715ee). | Decided: the first version with content is built on the next reference-systems release that carries the catalog pins. |
 | O3 | `resolved.version` of the Composer is decided but not yet written into saved files. | Decided: the Composer writes it from generator 0.9.8-beta on; the package refuses an unknown version. For files of older generators it validates against the schema and warns on a generator version it was not tested with. |
 | O4 | Which virtual channel of a SpaceFibre link carries the RMAP target. | Decided: traced in the resolved netlist from the target to the port; `new` refuses when it cannot. |
 | O5 | The documentation sites are built at the tags of the cores, with their own MkDocs toolchains. | Decided: every site is built in its own environment with the pinned requirements of `tools/docs` of the core at its tag. |
