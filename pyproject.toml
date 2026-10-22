@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openspacehdl"
+dynamic = ["version"]
+description = "Open Space HDL, open-source VHDL IP cores for spacecraft on-board data handling: early release that lists the family"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Julian Schneider", email = "julian.schneider@openspacehdl.org" }]
+keywords = ["vhdl", "fpga", "ip-core", "space", "spacewire", "spacefibre", "ccsds", "ecss"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+
+[project.urls]
+Homepage = "https://openspacehdl.org"
+
+[project.scripts]
+openspacehdl = "openspacehdl.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "openspacehdl.__version__" }
+
+[tool.setuptools.package-data]
+openspacehdl = ["data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
