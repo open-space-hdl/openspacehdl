@@ -220,9 +220,9 @@ O7).
 ### 4.5 Path length
 
 Windows limits a path to 260 characters unless long paths are enabled, and GHDL and other tools fail beyond it. A
-wheel installs below `site-packages`, which is already long: about 70 characters for a per-user Python on
-Windows, more in a virtual environment inside a project. The build therefore allows an install prefix of 120 characters and checks
-that the longest path in the wheel stays below 260 minus 120, that is at most 139 characters (rule L8).
+wheel installs below `site-packages`, which is already long: about 70 characters for a per-user Python on Windows,
+more in a virtual environment inside a project. The build therefore allows an install prefix of 120 characters and
+checks that the longest path in the wheel stays below 260 minus 120, that is at most 139 characters (rule L8).
 
 With the repository names as directories, the longest path at the current pins would be 134 characters, a constraint
 file of a reference system:
