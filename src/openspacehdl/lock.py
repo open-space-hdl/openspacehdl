@@ -8,6 +8,7 @@ it applies and the manifest it writes are defined here, on plain data, so that t
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from importlib import resources
@@ -305,12 +306,18 @@ class Lock:
         )
 
 
+ALLOW_WAIVED_ENV = "OPENSPACEHDL_ALLOW_WAIVED"
+
+
 def load() -> Lock:
-    """The lock manifest of this package version."""
+    """The lock manifest of this package version.
+
+    A manifest that waives rules comes only from an evidence build of the package (tools/check.py --real-build); it
+    is read only when the environment variable OPENSPACEHDL_ALLOW_WAIVED is 1."""
     f = resources.files("openspacehdl").joinpath("data/lock.json")
     if not f.is_file():
         from openspacehdl import __version__
 
         raise LockError(f"version {__version__} carries no lock manifest: it lists the family only and contains no "
                         f"cores")
-    return Lock.from_dict(json.loads(f.read_text(encoding="utf-8")))
+    return Lock.from_dict(json.loads(f.read_text(encoding="utf-8")), os.environ.get(ALLOW_WAIVED_ENV) == "1")

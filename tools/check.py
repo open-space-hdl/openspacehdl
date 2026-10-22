@@ -131,6 +131,8 @@ def deep_install(args, wheel: Path, project: dict) -> int:
     run_dir.mkdir(exist_ok=True)
     (run_dir / "run.py").write_text(DEEP_RUN, encoding="utf-8")
     env = {**os.environ, "VUNIT_SIMULATOR": "ghdl"}
+    if args.waive:
+        env["OPENSPACEHDL_ALLOW_WAIVED"] = "1"
     r = subprocess.run([str(vpy), "run.py", "--compile", "-p", "2"], cwd=run_dir, env=env, capture_output=True,
                        text=True, encoding="utf-8", errors="replace")
     version = subprocess.run([str(vpy), "-c", "import vunit; print(vunit.__version__)"], capture_output=True,
