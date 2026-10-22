@@ -199,18 +199,16 @@ The PSI HDL Library License has no SPDX identifier, so the expression names it w
 
 ```toml
 license = "MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0"
-license-files = [
-    "LICENSE",
-    "src/openspacehdl/hdl/*/License.txt",
-    "src/openspacehdl/hdl/*/LGPL2_1.txt",
-    "src/openspacehdl/hdl/olo/3rdParty/en_cl_fix/LICENSE.md",
-    "src/openspacehdl/hdl/uvvm/LICENSE",
-]
+license-files = ["LICENSE", "src/openspacehdl/licenses/*.txt", "src/openspacehdl/licenses/*.md"]
 ```
 
-A trial build with this form passes: setuptools accepts the expression (`packaging.licenses` validates it), writes
-one `License-File` entry per file into the metadata and copies the files to `.dist-info/licenses/`, and
-`twine check --strict` passes. Rule L7 keeps the expression and the files complete when a repository is added.
+The licence texts are part of the package repository, in `src/openspacehdl/licenses/` (`PSI-HDL-1.0.txt`,
+`LGPL-2.1.txt`, `Apache-2.0.txt`, `MIT-en_cl_fix.md`, with `licenses.json` naming the SPDX identifier of each), so
+the metadata is the same for every build. The snapshots keep the licence files of their repositories as well. Rule
+L7 checks that every licence file of a snapshot is byte for byte one of these texts, that the expression names its
+identifier and that `license-files` covers every text. setuptools validates the expression with
+`packaging.licenses`, writes one `License-File` entry per file into the metadata and copies the files to
+`.dist-info/licenses/`; `twine check --strict` passes.
 
 The portal carries content under further licences:
 
