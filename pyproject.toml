@@ -7,8 +7,8 @@ name = "openspacehdl"
 dynamic = ["version"]
 description = "Open Space HDL, open-source VHDL IP cores for spacecraft on-board data handling: early release that lists the family"
 readme = "README.md"
-license = "MIT"
-license-files = ["LICENSE"]
+license = "MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0"
+license-files = ["LICENSE", "src/openspacehdl/licenses/*.txt", "src/openspacehdl/licenses/*.md"]
 requires-python = ">=3.10"
 authors = [{ name = "Julian Schneider", email = "julian.schneider@openspacehdl.org" }]
 keywords = ["vhdl", "fpga", "ip-core", "space", "spacewire", "spacefibre", "ccsds", "ecss"]
@@ -38,7 +38,14 @@ openspacehdl = "openspacehdl.cli:main"
 version = { attr = "openspacehdl.__version__" }
 
 [tool.setuptools.package-data]
-openspacehdl = ["data/*.json"]
+openspacehdl = ["data/*.json", "licenses/*", "hdl/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Limits of the wheel (docs/design.md, rules L8 and L9): the longest path in the wheel stays below path-limit
+# minus install-prefix characters, the wheel below the PyPI file limit of the project.
+[tool.openspacehdl]
+path-limit = 260
+install-prefix = 120
+pypi-file-limit-mb = 100

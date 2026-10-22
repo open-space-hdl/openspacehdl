@@ -20,24 +20,39 @@ def load_tool():
     return mod
 
 
-LICENSE = "PSI HDL Library License, Version 1.0\n======\n"
-UVVM = "5" * 40
-FIX = "6" * 40
+LIC = ROOT / "src" / "openspacehdl" / "licenses"
+PSI = (LIC / "PSI-HDL-1.0.txt").read_text(encoding="utf-8")
+LGPL = (LIC / "LGPL-2.1.txt").read_text(encoding="utf-8")
+APACHE = (LIC / "Apache-2.0.txt").read_text(encoding="utf-8")
+MIT_FIX = (LIC / "MIT-en_cl_fix.md").read_text(encoding="utf-8")
+LICENSES = {"License.txt": PSI, "LGPL2_1.txt": LGPL}
 
 
-@pytest.fixture
-def world(tmp_path):
-    """Website, reference-systems, two cores and Open Logic FT, consistent; the clones are in tmp_path/repos."""
+@pytest.fixture(scope="session")
+def world_template(tmp_path_factory):
+    """Website, reference-systems, two cores, Open Logic FT with en_cl_fix, and UVVM, consistent.
+
+    The clones are in <dir>/repos, UVVM in <dir>/uvvm. Built once; every test works on a copy (world)."""
+    tmp_path = tmp_path_factory.mktemp("world")
     repos = tmp_path / "repos"
-    owr = make_repo(repos / "openwire", {"License.txt": LICENSE, "compile_order.txt": "hdl/a.vhd\n"}, {"uvvm": UVVM})
+    uvvm = tmp_path / "uvvm"
+    uv = make_repo(uvvm, {"LICENSE": APACHE, "uvvm_util/src/uvvm_util_context.vhd": "-- util\n",
+                          "bitvis_vip_axilite/src/axilite_vvc.vhd": "-- vvc\n", "uvvm_util/doc/manual.txt": "doc\n"})
+    owr = make_repo(repos / "openwire", {**LICENSES, "compile_order.txt": "hdl/a.vhd\n", "hdl/a.vhd": "-- a\n",
+                                         "sw/owr_regs.h": "#define OWR 1\n", "hdl/a_tb.vhd": "-- tb\n"},
+                    {"uvvm": uv})
     git(repos / "openwire", "tag", "v0.1.0")
-    ocp = make_repo(repos / "opencompact", {"License.txt": LICENSE, "compile_order.txt": "hdl/b.vhd\n",
-                                            "hdl/ocp_pa/compile_order_sim.txt": "hdl/ocp_pa/sim/m.vhd\n"},
-                    {"uvvm": UVVM})
+    ocp = make_repo(repos / "opencompact", {**LICENSES, "compile_order.txt": "hdl/b.vhd\n", "hdl/b.vhd": "-- b\n",
+                                            "hdl/ocp_pa/compile_order_sim.txt": "hdl/ocp_pa/sim/m.vhd\n",
+                                            "hdl/ocp_pa/sim/m.vhd": "-- model\n"},
+                    {"uvvm": uv})
     git(repos / "opencompact", "tag", "-a", "v0.1.1", "-m", "release")
-    olo = make_repo(repos / "open-logic-ft", {"License.txt": LICENSE, "compile_order.txt": "src/c.vhd\n"},
-                    {"3rdParty/en_cl_fix": FIX})
-    git(repos / "open-logic-ft", "tag", "-a", "4.7.0-ft.8", "-m", "ft.8")
+    olo_dir = repos / "open-logic-ft"
+    make_repo(olo_dir, {**LICENSES, "doc/readme.md": "doc\n"})
+    fix = make_repo(olo_dir / "3rdParty" / "en_cl_fix", {"LICENSE.md": MIT_FIX, "hdl/en_cl_fix_pkg.vhd": "-- fix\n"})
+    olo = commit(olo_dir, {"compile_order.txt": "3rdParty/en_cl_fix/hdl/en_cl_fix_pkg.vhd\nsrc/c.vhd\n",
+                           "src/c.vhd": "-- c\n"}, {"3rdParty/en_cl_fix": fix})
+    git(olo_dir, "tag", "-a", "4.7.0-ft.8", "-m", "ft.8")
     catalog = {
         "format": "open-space-composer-catalog", "formatVersion": 1, "id": "abcdef012345",
         "sources": [
@@ -59,17 +74,32 @@ def world(tmp_path):
                               "- name: OpenCompact\n  repo: opencompact\n  public: true\n  trl: 3\n",
     })
     rs = repos / "reference-systems"
-    make_repo(rs, {"License.txt": LICENSE, "tools/composer_ref.txt": web + "\n"},
+    make_repo(rs, {**LICENSES, "tools/composer_ref.txt": web + "\n", "systems/s/s.composer.json": "{}\n",
+                   "sim/tb/rs_far_end.vhd": "-- far end\n", "docs/notes.md": "notes\n"},
               {"cores/opencompact": ocp, "cores/open-logic-ft": olo})
     git(rs, "tag", "-a", "v0.1.1", "-m", "release")
     for r in ("openwire", "opencompact", "open-logic-ft", "reference-systems"):
         publish(repos / r)
-    return {"tmp": tmp_path, "repos": repos, "site": site, "web": web, "owr": owr, "ocp": ocp, "olo": olo, "rs": rs}
+    return {"tmp": tmp_path, "web": web, "owr": owr, "ocp": ocp, "olo": olo, "uv": uv, "fix": fix}
+
+
+REMOTES = ("openwire", "opencompact", "open-logic-ft", "reference-systems")
+
+
+@pytest.fixture
+def world(world_template, tmp_path):
+    """A copy of the template world in tmp_path, with the remotes pointing at the copies."""
+    for name in ("repos", "site", "uvvm"):
+        shutil.copytree(world_template["tmp"] / name, tmp_path / name)
+    for r in REMOTES:
+        git(tmp_path / "repos" / r, "remote", "set-url", "origin", str(tmp_path / "repos" / f"{r}.git"))
+    return {**world_template, "tmp": tmp_path, "repos": tmp_path / "repos", "site": tmp_path / "site",
+            "rs": tmp_path / "repos" / "reference-systems", "uvvm": tmp_path / "uvvm"}
 
 
 def args(w, *extra, tag="v0.1.1"):
     return ["--site", str(w["site"]), "--site-commit", "HEAD", "--refsys", str(w["rs"]), "--refsys-tag", tag,
-            "--repos", str(w["repos"]), "--out", str(w["tmp"] / "lock.json"), *extra]
+            "--repos", str(w["repos"]), "--uvvm", str(w["uvvm"]), "--out", str(w["tmp"] / "lock.json"), *extra]
 
 
 def test_writes_the_manifest(world):
@@ -80,8 +110,9 @@ def test_writes_the_manifest(world):
     assert m["website"]["generator"] == "0.9.8-beta" and m["website"]["catalog"] == "abcdef012345"
     assert m["referenceSystems"]["tag"] == "v0.1.1"
     assert m["referenceSystems"]["commit"] == git(world["rs"], "rev-parse", "v0.1.1^{commit}")
-    assert m["openLogic"]["commit"] == world["olo"] and m["openLogic"]["submodules"] == {"3rdParty/en_cl_fix": FIX}
-    assert m["uvvm"]["commit"] == UVVM
+    assert m["openLogic"]["commit"] == world["olo"]
+    assert m["openLogic"]["submodules"] == {"3rdParty/en_cl_fix": world["fix"]}
+    assert m["uvvm"]["commit"] == world["uv"]
     cores = {c["id"]: c for c in m["cores"]}
     assert cores["opencompact"]["tag"] == "v0.1.1" and cores["openwire"]["tag"] == "v0.1.0"
     assert cores["opencompact"]["models"] == {"ocp_pa": "hdl/ocp_pa/compile_order_sim.txt"}
@@ -143,3 +174,94 @@ def test_a_missing_clone_is_an_input_error(world, capsys):
     tool = load_tool()
     assert tool.main(args(world)) == 2
     assert "no clone of openwire" in capsys.readouterr().err
+
+
+def test_the_manifest_lists_the_snapshot_files(world):
+    tool = load_tool()
+    assert tool.main(args(world)) == 0
+    files = json.loads((world["tmp"] / "lock.json").read_text(encoding="utf-8"))["files"]
+    assert sorted(files) == ["olo", "opencompact", "openwire", "refsys", "uvvm"]
+    assert sorted(files["openwire"]) == ["LGPL2_1.txt", "License.txt", "compile_order.txt", "hdl/a.vhd",
+                                         "sw/owr_regs.h"]
+    assert sorted(files["opencompact"]) == ["LGPL2_1.txt", "License.txt", "compile_order.txt", "hdl/b.vhd",
+                                            "hdl/ocp_pa/compile_order_sim.txt", "hdl/ocp_pa/sim/m.vhd"]
+    assert sorted(files["olo"]) == ["3rdParty/en_cl_fix/LICENSE.md", "3rdParty/en_cl_fix/hdl/en_cl_fix_pkg.vhd",
+                                    "LGPL2_1.txt", "License.txt", "compile_order.txt", "src/c.vhd"]
+    assert sorted(files["refsys"]) == ["LGPL2_1.txt", "License.txt", "sim/tb/rs_far_end.vhd",
+                                       "systems/s/s.composer.json", "tools/composer_ref.txt"]
+    assert sorted(files["uvvm"]) == ["LICENSE", "bitvis_vip_axilite/src/axilite_vvc.vhd",
+                                     "uvvm_util/src/uvvm_util_context.vhd"]
+
+
+def load_snapshot():
+    spec = importlib.util.spec_from_file_location("snapshot_tool", ROOT / "tools" / "snapshot.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def snap_args(w, out, *extra):
+    return ["--repos", str(w["repos"]), "--uvvm", str(w["uvvm"]), "--lock", str(w["tmp"] / "lock.json"),
+            "--out", str(out), *extra]
+
+
+def test_snapshot_writes_every_file_byte_for_byte(world):
+    assert load_tool().main(args(world)) == 0
+    out = world["tmp"] / "hdl"
+    (out / "stale").mkdir(parents=True)
+    (out / "stale" / "old.vhd").write_text("old", encoding="utf-8")
+    assert load_snapshot().main(snap_args(world, out)) == 0
+    files = json.loads((world["tmp"] / "lock.json").read_text(encoding="utf-8"))["files"]
+    written = sorted(str(f.relative_to(out)).replace("\\", "/") for f in out.rglob("*") if f.is_file())
+    assert written == sorted(f"{d}/{p}" for d, e in files.items() for p in e)
+    assert (out / "olo" / "3rdParty" / "en_cl_fix" / "hdl" / "en_cl_fix_pkg.vhd").read_bytes() == b"-- fix\n"
+    assert (out / "openwire" / "License.txt").read_text(encoding="utf-8") == PSI
+
+
+def test_snapshot_refuses_a_changed_hash(world, capsys):
+    assert load_tool().main(args(world)) == 0
+    f = world["tmp"] / "lock.json"
+    m = json.loads(f.read_text(encoding="utf-8"))
+    m["files"]["openwire"]["hdl/a.vhd"] = "0" * 64
+    f.write_text(json.dumps(m), encoding="utf-8")
+    assert load_snapshot().main(snap_args(world, world["tmp"] / "hdl")) == 1
+    assert "L6: openwire/hdl/a.vhd: the hash differs" in capsys.readouterr().err
+
+
+def test_snapshot_refuses_a_path_beyond_the_budget(world, capsys):
+    repo = world["repos"] / "openwire"
+    long_name = "hdl/" + "x" * 120 + ".vhd"
+    new = commit(repo, {"compile_order.txt": f"hdl/a.vhd\n{long_name}\n", long_name: "-- long\n"})
+    git(repo, "tag", "v0.1.2")
+    publish(repo)
+    cat_file = world["site"] / "assets/composer/catalog.json"
+    catalog = json.loads(cat_file.read_text(encoding="utf-8"))
+    catalog["sources"][0]["commit"] = new
+    web = commit(world["site"], {"assets/composer/catalog.json": json.dumps(catalog)})
+    commit(world["rs"], {"tools/composer_ref.txt": web + "\n"})
+    git(world["rs"], "tag", "v0.1.5")
+    publish(world["rs"])
+    assert load_tool().main(args(world, tag="v0.1.5")) == 0
+    assert load_snapshot().main(snap_args(world, world["tmp"] / "hdl")) == 1
+    assert "L8: openspacehdl/hdl/openwire/hdl/xxx" in capsys.readouterr().err
+
+
+def test_a_waived_rule_is_recorded_and_refused_by_the_snapshot(world, capsys):
+    rs = world["rs"]
+    commit(rs, {}, {"cores/opencompact": world["owr"]})
+    git(rs, "tag", "v0.1.2")
+    publish(rs)
+    tool = load_tool()
+    assert tool.main(args(world, "--waive", "L2", tag="v0.1.2")) == 0
+    m = json.loads((world["tmp"] / "lock.json").read_text(encoding="utf-8"))
+    assert m["waived"] == ["L2"]
+    assert "waives L2" in capsys.readouterr().err
+    snap = load_snapshot()
+    assert snap.main(snap_args(world, world["tmp"] / "hdl")) == 1
+    assert "for tests of the build only" in capsys.readouterr().err
+    assert snap.main(snap_args(world, world["tmp"] / "hdl", "--allow-waived")) == 0
+
+
+def test_an_unknown_rule_cannot_be_waived(world, capsys):
+    assert load_tool().main(args(world, "--waive", "L99")) == 1
+    assert "unknown rules to waive: L99" in capsys.readouterr().err

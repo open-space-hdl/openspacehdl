@@ -163,9 +163,20 @@ def check(inputs: Inputs) -> list[Violation]:
     return out
 
 
-def build(inputs: Inputs, package_version: str) -> dict:
-    """The manifest of these inputs; raises LockError with every violation when a rule fails."""
-    violations = check(inputs)
+RULES = ("L1", "L2", "L3", "L4", "L5", "L10")
+
+
+def build(inputs: Inputs, package_version: str, files: dict[str, dict[str, str]] | None = None,
+          waive: tuple[str, ...] = ()) -> dict:
+    """The manifest of these inputs; raises LockError with every violation when a rule fails.
+
+    files: the snapshot files per snapshot directory, path -> SHA-256 (rule L6). waive: rules whose violations are
+    accepted; the manifest records them, and only a test of the build reads such a manifest (Lock.from_dict).
+    """
+    unknown = sorted(set(waive) - set(RULES))
+    if unknown:
+        raise LockError(f"unknown rules to waive: {', '.join(unknown)}")
+    violations = [v for v in check(inputs) if v.rule not in waive]
     if violations:
         raise LockError("the inputs break the consistency rules:\n" + "\n".join(f"  {v}" for v in violations))
     olo, cores = split_sources(inputs)
@@ -216,6 +227,8 @@ def build(inputs: Inputs, package_version: str) -> dict:
             }
             for s in cores
         ],
+        **({"files": {d: dict(sorted(e.items())) for d, e in sorted(files.items())}} if files else {}),
+        **({"waived": sorted(set(waive))} if waive else {}),
     }
 
 
@@ -252,12 +265,18 @@ class Lock:
     olo_commit: str
     uvvm_commit: str
     cores: tuple[Core, ...]
+    # snapshot directory -> path -> SHA-256
+    files: dict[str, dict[str, str]] = field(default_factory=dict)
+    waived: tuple[str, ...] = ()
 
     @staticmethod
-    def from_dict(d: dict) -> Lock:
+    def from_dict(d: dict, allow_waived: bool = False) -> Lock:
         if d.get("format") != FORMAT or d.get("version") != VERSION:
             raise LockError(f"the lock manifest has format {d.get('format')!r} version {d.get('version')!r}; this "
                             f"package reads {FORMAT} version {VERSION}")
+        if d.get("waived") and not allow_waived:
+            raise LockError(f"the lock manifest waives the rules {', '.join(d['waived'])}; such a manifest serves "
+                            f"tests of the build only")
         return Lock(
             package=d["package"],
             website_commit=d["website"]["commit"],
@@ -277,6 +296,8 @@ class Lock:
                 )
                 for c in d["cores"]
             ),
+            files={k: dict(v) for k, v in d.get("files", {}).items()},
+            waived=tuple(d.get("waived", ())),
         )
 
 

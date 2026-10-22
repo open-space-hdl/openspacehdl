@@ -51,8 +51,13 @@ python -m build
 a release tag of reference-systems and the clones of the repositories, and stops when the pins are not consistent;
 `--report` lists the violations, `--check` compares.
 
+`tools/snapshot.py` writes the source snapshots of the manifest into `src/openspacehdl/hdl/` (not tracked) and checks
+their hashes, licences and path lengths; `tools/wheel_check.py <wheel>` checks a built wheel against the manifest it
+carries (rules L6 to L9 of docs/design.md).
+
 `python tools/check.py [--site <clone of open-space-hdl.github.io>]` runs the quality gates (pytest, markdownlint,
-no em-dash, family data) and fails on the exit status of the first gate that fails.
+no em-dash, family data) and fails on the exit status of the first gate that fails. `python tools/check.py
+--real-build ...` builds and checks a wheel with content from a copy of HEAD, on demand.
 
 ## Licence
 

@@ -8,3 +8,5 @@ venv*/
 # Build output
 build/
 dist/
+# Source snapshots, written by tools/snapshot.py from the lock manifest
+src/openspacehdl/hdl/

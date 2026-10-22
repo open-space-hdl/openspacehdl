@@ -12,9 +12,13 @@ version of the Composer at the website commit, the submodules and tools/composer
 tag, and the tags of every repository, and applies the consistency rules of openspacehdl.lock. Without --offline it
 also asks the remote of every repository (git ls-remote) which tags are published.
 
+The manifest also lists every file of the source snapshots with its SHA-256 (rule L6), selected as tools/snapshot.py
+selects them; UVVM is read from --uvvm, by default the uvvm submodule of the first core clone that has the commit.
+
 Default: write the manifest; nothing is written when a rule fails. --check: compare the committed manifest with the
-one the inputs give. --report: print the violations only. Exit status 0 on success, 1 on a violation or a difference,
-2 on an error of the inputs.
+one the inputs give. --report: print the violations only. --waive <rule> accepts the violations of a rule and
+records it in the manifest; such a manifest serves tests of the build only and is never released. Exit status 0 on
+success, 1 on a violation or a difference, 2 on an error of the inputs.
 
 Needs PyYAML (development only; the package itself has no dependencies).
 """
@@ -32,10 +36,13 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from openspacehdl import __version__  # noqa: E402
 from openspacehdl.errors import LockError  # noqa: E402
 from openspacehdl.lock import OLO_ID, REFSYS_REPO, Inputs, build, check, dumps  # noqa: E402
+
+import snapshot  # noqa: E402
 
 OUT = ROOT / "src" / "openspacehdl" / "data" / "lock.json"
 GENERATOR = re.compile(r"export const GENERATOR = \{ name: '[^']*', version: '([^']+)' \}")
@@ -163,6 +170,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--refsys-tag", required=True, help="release tag of reference-systems")
     parser.add_argument("--repos", type=Path, required=True, help="directory with the clones of the repositories")
     parser.add_argument("--offline", action="store_true", help="do not ask the remotes which tags are published")
+    parser.add_argument("--uvvm", type=Path, help="clone of UVVM (default: the uvvm submodule of a core clone)")
+    parser.add_argument("--waive", action="append", default=[], metavar="RULE",
+                        help="accept the violations of a rule (tests of the build only)")
     parser.add_argument("--out", type=Path, default=OUT, help=argparse.SUPPRESS)
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--check", action="store_true", help="compare with the committed manifest, write nothing")
@@ -180,11 +190,20 @@ def main(argv: list[str] | None = None) -> int:
             print(v)
         print(f"{len(violations)} violation(s)")
         return 1 if violations else 0
+    waive = tuple(args.waive)
     try:
-        text = dumps(build(inputs, __version__))
+        manifest = build(inputs, __version__, waive=waive)
+        sources = snapshot.trees(manifest, args.repos, args.uvvm, refsys=args.refsys)
+        files = {d: snapshot.hashes(kind, tree, **kw) for d, (kind, tree, kw) in sources.items()}
+        text = dumps(build(inputs, __version__, files=files, waive=waive))
     except LockError as e:
         print(f"lock: {e}", file=sys.stderr)
         return 1
+    except snapshot.InputError as e:
+        print(f"lock: {e}", file=sys.stderr)
+        return 2
+    if waive:
+        print(f"lock: the manifest waives {', '.join(waive)}; it serves tests of the build only", file=sys.stderr)
     if args.check:
         current = args.out.read_text(encoding="utf-8") if args.out.exists() else ""
         if current != text:
