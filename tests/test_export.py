@@ -2,10 +2,11 @@
 
 import hashlib
 import json
+import shutil
 
 import pytest
 import world as worldlib
-from gitrepo import git
+from gitrepo import commit, git
 
 from openspacehdl import cli, export, lock
 from openspacehdl.installed import Installed
@@ -147,3 +148,35 @@ def test_the_command(inst, tmp_path, capsys):
     assert "exported source snapshots" in capsys.readouterr().out
     assert cli.main(["export", str(tmp_path / "t")]) == 1
     assert "not empty" in capsys.readouterr().err
+
+
+def test_a_bundle_with_other_refs_than_its_spec_is_refused(world, monkeypatch):
+    bundles = worldlib.load_tool("bundles")
+    repo = world["repos"] / "opencompact"
+    spec = {"refs": bundles.refs(repo, world["ocp"], "main", None)}
+    monkeypatch.setattr(bundles, "list_heads", lambda _: {})
+    with pytest.raises(bundles.BundleError, match="the refs of the bundle differ"):
+        bundles.create(repo, spec, world["tmp"] / "out" / "x.bundle")
+
+
+def test_export_tree_of_a_damaged_installation(package, monkeypatch, tmp_path):
+    inst = package["inst"]
+    hdl = tmp_path / "hdl"
+    shutil.copytree(inst.hdl, hdl)
+    (hdl / "opencompact" / "hdl" / "b.vhd").write_text("-- changed\n", encoding="utf-8")
+    damaged = Installed(inst.lock, hdl, inst.bundles, inst.manifest)
+    monkeypatch.setattr(export, "installed", lambda: damaged)
+    with pytest.raises(export.OshError, match="opencompact/hdl/b.vhd is missing or differs"):
+        export.export_tree(tmp_path / "export")
+
+
+def test_the_bundle_branch_is_at_the_pinned_commit_when_the_clone_is_ahead(world):
+    bundles = worldlib.load_tool("bundles")
+    repo = world["repos"] / "opencompact"
+    newer = commit(repo, {"hdl/b.vhd": "-- after the release\n"})
+    spec = {"refs": bundles.refs(repo, world["ocp"], "main", None)}
+    target = world["tmp"] / "out" / "x.bundle"
+    bundles.create(repo, spec, target)
+    heads = bundles.list_heads(target)
+    assert heads["refs/heads/main"] == world["ocp"] != newer
+    assert git(repo, "rev-parse", "main") == newer

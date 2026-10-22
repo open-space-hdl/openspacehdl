@@ -115,10 +115,9 @@ def create(clone: Path, spec: dict, target: Path) -> None:
         bare = Path(tmp) / "copy.git"
         try:
             git(None, "clone", "-q", "--bare", "--no-local", str(clone), str(bare))
+            # The copy takes the refs of the bundle (the branch at the pinned commit); git bundle create then carries
+            # only the refs it is given.
             wanted = spec["refs"]
-            for name in git(bare, "for-each-ref", "--format=%(refname)").split():
-                if name not in wanted:
-                    git(bare, "update-ref", "-d", name)
             for name, obj in wanted.items():
                 git(bare, "update-ref", name, obj)
             target.parent.mkdir(parents=True, exist_ok=True)
