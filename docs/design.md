@@ -300,7 +300,9 @@ Every error is an `openspacehdl.OshError` with a message that says what to do:
 is taken from `--hdl`, else from `hdl/` next to the file, else from the directory of the file. `new` refuses, with
 the reason, when:
 
-- the file fails the published schema of its `formatVersion` (system-1 or system-2, stored in the package);
+- the file fails the published schema of its `formatVersion` (system-1 or system-2, stored in the package). The
+  package checks it with its own validator of the JSON Schema 2020-12 keywords these schemas use
+  (`openspacehdl.jsonschema`), so it needs no dependency; a keyword it does not know is an error of the schema;
 - the file has no `resolved` part, `resolved.problems` is not empty, or `checks` has an entry of severity `error`
   (the rule of Export HDL);
 - `resolved.version` is unknown to the package. The Composer writes it as the first key of `resolved` from generator

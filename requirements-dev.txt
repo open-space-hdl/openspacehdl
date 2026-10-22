@@ -1,4 +1,5 @@
 build>=1.2
+jsonschema>=4.18
 pytest>=8
 pyyaml>=6
 twine>=6
