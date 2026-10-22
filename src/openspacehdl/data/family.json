@@ -1,0 +1,158 @@
+{
+  "source": {
+    "repository": "open-space-hdl/open-space-hdl.github.io",
+    "commit": "1b3d619cb4b4cef3fe7a3893a0d0040c1d4049bb"
+  },
+  "site": "https://openspacehdl.org",
+  "github": "https://github.com/open-space-hdl",
+  "groups": [
+    {
+      "id": "interfaces-protocols",
+      "title": "Interfaces & Protocols",
+      "summary": "SpaceWire and SpaceFibre links, CAN and 1553 buses, and the protocols that run over them."
+    },
+    {
+      "id": "processing-modules",
+      "title": "Processing Modules",
+      "summary": "Cores that process payload data on board, such as image compression and encryption."
+    },
+    {
+      "id": "system-infrastructure",
+      "title": "System Infrastructure",
+      "summary": "Cores that move data between the memories and the peripherals of an on-board system."
+    },
+    {
+      "id": "building-blocks",
+      "title": "Building Blocks",
+      "summary": "The fault-tolerant Open Logic entities that every core is built on."
+    }
+  ],
+  "projects": [
+    {
+      "name": "OpenWire",
+      "group": "interfaces-protocols",
+      "tagline": [
+        "ECSS-E-ST-50-12C Rev.1"
+      ],
+      "summary": "SpaceWire port with node interface: Data-Strobe encoding, link control, packets, time-codes and distributed interrupts.",
+      "public": true,
+      "repo": "openwire",
+      "docs": true,
+      "trl": 3,
+      "trl_status": "Fully verified by simulation. Not yet tested on hardware, no flight heritage."
+    },
+    {
+      "name": "OpenFibre",
+      "group": "interfaces-protocols",
+      "tagline": [
+        "ECSS-E-ST-50-11C"
+      ],
+      "summary": "SpaceFibre port with 1 to 4 lanes, up to 32 virtual channels, quality of service, broadcast and error recovery.",
+      "public": true,
+      "repo": "openfibre",
+      "docs": true,
+      "trl": 3,
+      "trl_status": "Fully verified by simulation. Not yet tested on hardware, no flight heritage."
+    },
+    {
+      "name": "OpenRMAP",
+      "group": "interfaces-protocols",
+      "tagline": [
+        "ECSS-E-ST-50-52C"
+      ],
+      "summary": "RMAP target and initiator for reading and writing remote memory over SpaceWire and SpaceFibre networks.",
+      "public": true,
+      "repo": "openrmap",
+      "docs": true,
+      "trl": 3,
+      "trl_status": "Fully verified by simulation. Not yet tested on hardware, no flight heritage."
+    },
+    {
+      "name": "OpenSPP",
+      "group": "interfaces-protocols",
+      "tagline": [
+        "CCSDS 133.0-B-2"
+      ],
+      "summary": "Space Packet service with APID routing and loss detection for up to 16 send and 16 receive ports, over SpaceWire, SpaceFibre or other links.",
+      "public": true,
+      "repo": "openspp",
+      "docs": true,
+      "trl": 3,
+      "trl_status": "Fully verified by simulation. Not yet tested on hardware, no flight heritage."
+    },
+    {
+      "name": "OpenCAN",
+      "group": "interfaces-protocols",
+      "tagline": [
+        "ECSS-E-ST-50-15C"
+      ],
+      "summary": "CAN network core with nominal and redundant bus, bus redundancy management, CANopen services and time distribution.",
+      "public": false
+    },
+    {
+      "name": "Open1553",
+      "group": "interfaces-protocols",
+      "tagline": [
+        "ECSS-E-ST-50-13C"
+      ],
+      "summary": "Bus controller, remote terminal and bus monitor for the dual-redundant 1553 data bus, with the Manchester II codec in the core.",
+      "public": false
+    },
+    {
+      "name": "OpenCompact",
+      "group": "processing-modules",
+      "tagline": [
+        "CCSDS 123.0-B-2"
+      ],
+      "summary": "Lossless and near-lossless compressor for multispectral and hyperspectral images, with all predictors and entropy coders of the standard.",
+      "public": true,
+      "repo": "opencompact",
+      "docs": true,
+      "trl": 3,
+      "trl_status": "Fully verified by simulation. Not yet tested on hardware, no flight heritage."
+    },
+    {
+      "name": "OpenCrypto",
+      "group": "processing-modules",
+      "tagline": [
+        "CCSDS 352.0-B-2"
+      ],
+      "summary": "Authenticated encryption and decryption of real-time data streams with AES-GCM, key table and IV generation.",
+      "public": true,
+      "repo": "opencrypto",
+      "docs": true,
+      "trl": 3,
+      "trl_status": "Fully verified by simulation. Not yet tested on hardware, no flight heritage."
+    },
+    {
+      "name": "OpenDMA",
+      "group": "system-infrastructure",
+      "tagline": [
+        "AXI4",
+        "AXI4-Stream",
+        "Scatter/Gather"
+      ],
+      "summary": "DMA core between AXI4 memory and AXI4-Stream peripherals, register-compatible with the AMD AXI DMA so that its drivers run unchanged.",
+      "public": true,
+      "repo": "opendma",
+      "docs": true,
+      "trl": 3,
+      "trl_status": "Fully verified by simulation. Not yet tested on hardware, no flight heritage."
+    },
+    {
+      "name": "Open Logic FT",
+      "group": "building-blocks",
+      "tagline": [
+        "ECC",
+        "TMR",
+        "Safe FSMs"
+      ],
+      "summary": "Fault-tolerant fork of Open Logic: RAMs and FIFOs with SECDED ECC, clock crossings with triplicated synchronisers.",
+      "public": true,
+      "repo": "open-logic-ft",
+      "docs": true,
+      "trl": 3,
+      "trl_status": "Fully verified by simulation. Not yet tested on hardware, no flight heritage."
+    }
+  ]
+}
