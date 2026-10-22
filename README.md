@@ -34,6 +34,8 @@ A project that is not yet public is listed as "Coming soon", without links.
 
 ## Development
 
+The design of the next phase is in [docs/design.md](docs/design.md).
+
 ```shell
 pip install -r requirements-dev.txt
 pip install -e .
