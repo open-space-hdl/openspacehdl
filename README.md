@@ -47,6 +47,13 @@ python -m build
 `tools/family_data.py` writes `src/openspacehdl/data/family.json` from `_data/projects.yml` and
 `_data/project_groups.yml` of the website repository; `--check` only compares.
 
+`tools/lock.py` writes the lock manifest `src/openspacehdl/data/lock.json` from the pins of the Composer catalog,
+a release tag of reference-systems and the clones of the repositories, and stops when the pins are not consistent;
+`--report` lists the violations, `--check` compares.
+
+`python tools/check.py [--site <clone of open-space-hdl.github.io>]` runs the quality gates (pytest, markdownlint,
+no em-dash, family data) and fails on the exit status of the first gate that fails.
+
 ## Licence
 
 The package is released under the [MIT License](LICENSE). The IP cores of the family have their own licence (PSI HDL
