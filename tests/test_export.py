@@ -109,9 +109,9 @@ def test_export_git(inst, package, tmp_path):
     dest = tmp_path / "export"
     w = package["world"]
     assert export.export_git(dest) == ["open-logic-ft", "openwire", "opencompact", "reference-systems"]
-    for name, commit, branch in (("openwire", w["owr"], "main"), ("opencompact", w["ocp"], "main"),
+    for name, pinned, branch in (("openwire", w["owr"], "main"), ("opencompact", w["ocp"], "main"),
                                  ("open-logic-ft", w["olo"], "fault-tolerant")):
-        assert git(dest / name, "rev-parse", "HEAD") == commit
+        assert git(dest / name, "rev-parse", "HEAD") == pinned
         assert git(dest / name, "rev-parse", "--abbrev-ref", "HEAD") == branch
         assert git(dest / name, "remote", "get-url", "origin") == f"https://github.com/open-space-hdl/{name}.git"
     assert git(dest / "opencompact", "tag").split() == ["v0.1.0", "v0.1.1"]
