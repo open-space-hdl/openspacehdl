@@ -22,6 +22,7 @@ import argparse
 import fnmatch
 import hashlib
 import json
+import posixpath
 import re
 import shutil
 import stat
@@ -117,11 +118,28 @@ def select(kind: str, tree: Tree, file_list: str = "compile_order.txt", file_lis
     elif kind == REFSYS:
         out.update(p for p in paths if p.startswith(REFSYS_DIRS))
     elif kind == UVVM:
-        out.update(p for p in paths if any(p.startswith(f"{c}/src/") for c in UVVM_COMPONENTS))
+        # Each component compiles the files of its script/compile_order.txt into its library, the VVC components also
+        # four files of uvvm_vvc_framework/src_target_dependent/.
+        for c in UVVM_COMPONENTS:
+            order = f"{c}/script/compile_order.txt"
+            if order not in tree:
+                raise InputError(f"no {order}")
+            out.add(order)
+            out.update(uvvm_order(tree, c))
     else:
         raise ValueError(kind)
     out.update(p for p in ROOT_LICENSES if p in tree)
     return sorted(out)
+
+
+def uvvm_order(tree: Tree, component: str) -> list[str]:
+    """The files of the compile order of a UVVM component, as paths of the UVVM repository."""
+    base = f"{component}/script"
+    files = [posixpath.normpath(f"{base}/{p}") for p in list_file(tree, f"{base}/compile_order.txt")]
+    missing = [p for p in files if p not in tree]
+    if missing:
+        raise InputError(f"{base}/compile_order.txt lists files that do not exist: {', '.join(missing[:5])}")
+    return files
 
 
 def sha256(data: bytes) -> str:

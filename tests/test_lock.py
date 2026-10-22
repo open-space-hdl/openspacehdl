@@ -242,3 +242,25 @@ def test_load_without_manifest_says_so():
     with pytest.raises(LockError) as e:
         lock.load()
     assert "carries no lock manifest" in str(e.value)
+
+
+def test_load_reads_a_waived_manifest_only_when_allowed(tmp_path, monkeypatch):
+    m = lock.build(inputs(), "0.1.0", waive=())
+    m["waived"] = ["L2"]
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "lock.json").write_text(lock.dumps(m), encoding="utf-8")
+
+    class Pkg:
+        def joinpath(self, name):
+            return tmp_path / name
+
+    monkeypatch.setattr(lock.resources, "files", lambda _: Pkg())
+    monkeypatch.delenv(lock.ALLOW_WAIVED_ENV, raising=False)
+    with pytest.raises(LockError, match="waives the rules L2"):
+        lock.load()
+    monkeypatch.setenv(lock.ALLOW_WAIVED_ENV, "1")
+    assert lock.load().waived == ("L2",)
+    monkeypatch.setenv(lock.ALLOW_WAIVED_ENV, "yes")
+    with pytest.raises(LockError):
+        lock.load()

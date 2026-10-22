@@ -160,8 +160,9 @@ The testbenches of the cores stay out (section 10). For reference-systems the sn
 `tools/`.
 
 UVVM: `uvvm_util`, `uvvm_vvc_framework`, `bitvis_vip_scoreboard`, `bitvis_vip_clock_generator`,
-`bitvis_vip_axilite`, `bitvis_vip_axistream` and `bitvis_vip_axi`, only their `src/` directories, at the commit the
-cores use, with UVVM's licence.
+`bitvis_vip_axilite`, `bitvis_vip_axistream` and `bitvis_vip_axi` at the commit the cores use, with UVVM's licence:
+the compile order of each component (`script/compile_order.txt`) and every file it lists. The VVC components list
+four files of `uvvm_vvc_framework/src_target_dependent/` as well, which each of them compiles into its own library.
 
 ### 4.3 Sizes
 
@@ -266,7 +267,12 @@ vu.main()
   architecture `mdl` of `ofb_pa_gty`), so that GHDL simulates the core without vendor libraries.
 - When the core's `verifiedWith` differs from the Open Logic tag of the manifest, `add_core` prints one note with both
   tags; it is not an error.
-- `add_uvvm(vu)` adds the UVVM components of section 4.2 as their own libraries.
+- `add_uvvm(vu)` adds the UVVM components of section 4.2, each as the library its compile order names, with the
+  files of that compile order; it sets the GHDL analysis flags UVVM needs (`-frelaxed`, `-Wno-hide`, `-Wno-shared`)
+  on these libraries, as `add_core` does on `olo` and on the simulation models (the regressions of the cores do the
+  same; the sources of a core are analysed strictly). A testbench that uses UVVM also needs `-frelaxed` at
+  elaboration (`ghdl.elab_flags`); the generated `run.py` of a project sets it.
+- Before it adds a file, every call checks it against the SHA-256 of the lock manifest.
 - `add_system(vu, project_dir)` adds a generated project (section 6): the libraries and files of the system's compile
   order (`hdl/<system>_compile_order.txt`, the file set the Composer exported), read from the snapshots of the
   package, with the simulation models in place of the vendor files; the top level; the UVVM components; the bench

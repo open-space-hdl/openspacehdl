@@ -3,6 +3,7 @@
     python tools/check.py [--site <website clone>] [--no-markdownlint]
     python tools/check.py --real-build --site <website clone> --refsys <reference-systems clone> --refsys-tag <tag>
                           --repos <dir> [--uvvm <clone>] [--waive <rule> ...]
+                          [--deep <dir> --deep-python <python> --vunit-install "<pip arguments>" ...]
 
 Gates, in this order; the first one that fails stops the run with exit status 1:
 
@@ -16,6 +17,11 @@ writes the lock manifest (tools/lock.py), the snapshots (tools/snapshot.py), bui
 checks it (tools/wheel_check.py). --waive passes rules to waive to the lock and allows the waived manifest in the
 later steps; such a wheel is evidence of the build only and is never released.
 
+--deep adds the deep install test (docs/design.md, section 9): a virtual environment of --deep-python below <dir>
+whose site-packages path is exactly as long as the install prefix of [tool.openspacehdl] (120 characters), the wheel
+installed into it without network, VUnit installed with each --vunit-install (arguments of pip install), and a VUnit
+project that adds every core of the lock and UVVM and compiles them in GHDL (VUNIT_SIMULATOR=ghdl, 2 parallel jobs).
+
 Exit status 0 only when every gate passed.
 """
 
@@ -23,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
 import shutil
 import stat
 import subprocess
@@ -71,6 +78,73 @@ def _remove(path: Path) -> None:
         shutil.rmtree(path, onerror=retry)
 
 
+DEEP_RUN = """import sys
+
+from vunit import VUnit
+
+import openspacehdl as osh
+from openspacehdl import lock
+
+try:
+    vu = VUnit.from_argv(compile_builtins=False)
+except TypeError:
+    vu = VUnit.from_argv()
+vu.add_vhdl_builtins()
+for core in lock.load().cores:
+    osh.add_core(vu, core.id)
+osh.add_uvvm(vu)
+vu.main()
+"""
+
+
+def deep_install(args, wheel: Path, project: dict) -> int:
+    prefix = int(project.get("tool", {}).get("openspacehdl", {}).get("install-prefix", 120))
+    base = args.deep.resolve()
+    base.mkdir(parents=True, exist_ok=True)
+    tail = "\\Lib\\site-packages" if sys.platform == "win32" else "/lib/python3.x/site-packages"
+    pad = prefix - len(str(base)) - 1 - len(tail)
+    if pad < 4:
+        print(f"FAIL deep install: {base} is too long for a site-packages path of {prefix} characters")
+        return 1
+    venv = base / ("v" + "e" * (pad - 1))
+    if venv.exists():
+        _remove(venv)
+    steps = [("deep venv", [str(args.deep_python), "-m", "venv", str(venv)])]
+    vpy = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    steps.append(("deep wheel", [str(vpy), "-m", "pip", "install", "-q", "--no-index", str(wheel)]))
+    for spec in args.vunit_install:
+        steps.append(("deep vunit", [str(vpy), "-m", "pip", "install", "-q", *spec.split()]))
+    for name, cmd in steps:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            print(f"FAIL {name} (exit status {r.returncode}): {' '.join(cmd)}")
+            print((r.stdout + r.stderr).rstrip()[-4000:])
+            return 1
+        print(f"ok   {name}")
+    site = subprocess.run([str(vpy), "-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    longest = subprocess.run([str(vpy), "-c", "import os, openspacehdl; r = os.path.dirname(openspacehdl.__file__); "
+                              "print(max((len(os.path.join(d, f)) for d, _, fs in os.walk(r) for f in fs)))"],
+                             capture_output=True, text=True, check=True).stdout.strip()
+    print(f"ok   site-packages has {len(site)} characters, the longest installed file {longest}")
+    run_dir = base / "run"
+    run_dir.mkdir(exist_ok=True)
+    (run_dir / "run.py").write_text(DEEP_RUN, encoding="utf-8")
+    env = {**os.environ, "VUNIT_SIMULATOR": "ghdl"}
+    if args.waive:
+        env["OPENSPACEHDL_ALLOW_WAIVED"] = "1"
+    r = subprocess.run([str(vpy), "run.py", "--compile", "-p", "2"], cwd=run_dir, env=env, capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
+    version = subprocess.run([str(vpy), "-c", "import vunit; print(vunit.__version__)"], capture_output=True,
+                             text=True).stdout.strip()
+    if r.returncode != 0:
+        print(f"FAIL deep compile with VUnit {version} (exit status {r.returncode})")
+        print((r.stdout + r.stderr).rstrip()[-6000:])
+        return 1
+    print(f"ok   deep compile with VUnit {version}: every core of the lock and UVVM compiled in GHDL")
+    return 0
+
+
 def real_build(args) -> int:
     missing = [o for o in ("site", "refsys", "refsys_tag", "repos") if getattr(args, o) is None]
     if missing:
@@ -114,6 +188,13 @@ def real_build(args) -> int:
         return 1
     note = f" (waived: {', '.join(args.waive)}; evidence of the build only)" if args.waive else ""
     print(f"ok   wheel check{note}")
+    if args.deep:
+        if args.deep_python is None or not args.vunit_install:
+            print("FAIL deep install: needs --deep-python and --vunit-install")
+            return 1
+        sys.path.insert(0, str(ROOT / "tools"))
+        import snapshot
+        return deep_install(args, wheels[-1], snapshot.pyproject())
     return 0
 
 
@@ -128,6 +209,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--uvvm", type=Path, help="clone of UVVM (--real-build)")
     parser.add_argument("--waive", action="append", default=[], metavar="RULE",
                         help="rule the lock may break (--real-build, evidence only)")
+    parser.add_argument("--deep", type=Path, help="directory of the deep install test (--real-build)")
+    parser.add_argument("--deep-python", type=Path, help="Python of the deep install test")
+    parser.add_argument("--vunit-install", action="append", default=[], metavar="ARGS",
+                        help="arguments of a pip install of VUnit in the deep install test")
     args = parser.parse_args(argv)
     if args.real_build:
         return real_build(args)

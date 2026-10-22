@@ -7,6 +7,8 @@ import sys
 import textwrap
 
 from openspacehdl import __version__
+from openspacehdl import lock as _lock
+from openspacehdl.errors import LockError
 from openspacehdl.family import Family, Project, load
 
 WIDTH = 100
@@ -56,6 +58,25 @@ def info(family: Family, name: str | None) -> int:
     return 0
 
 
+def show_lock() -> int:
+    try:
+        lk = _lock.load()
+    except LockError as e:
+        print(f"openspacehdl: {e}", file=sys.stderr)
+        return 1
+    print(f"openspacehdl {lk.package}")
+    print(f"  website {lk.website_commit[:10]}, catalog {lk.catalog}, Composer generator {lk.generator}")
+    print(f"  reference-systems {lk.refsys_tag} ({lk.refsys_commit[:10]})")
+    print(f"  Open Logic FT {lk.olo_tag} ({lk.olo_commit[:10]}), library {lk.olo_library}")
+    print(f"  UVVM {lk.uvvm_commit[:10]}")
+    for c in lk.cores:
+        note = f", verified with Open Logic FT {c.verified_with}" if c.verified_with else ""
+        print(f"  {c.name} {c.tag} ({c.commit[:10]}), library {c.library}, TRL {c.trl}{note}")
+    if lk.waived:
+        print(f"  waived rules: {', '.join(lk.waived)} (a test build, not a release)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
@@ -67,9 +88,12 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     p_info = sub.add_parser("info", help="list the projects of the family, as the website shows them")
     p_info.add_argument("project", nargs="?", help="show only this project (name or repository)")
+    sub.add_parser("lock", help="show the cores, Open Logic FT and UVVM this package version pins")
     args = parser.parse_args(argv)
 
     if args.command == "info":
         return info(load(), args.project)
+    if args.command == "lock":
+        return show_lock()
     parser.print_help()
     return 0

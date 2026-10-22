@@ -26,6 +26,19 @@ LGPL = (LIC / "LGPL-2.1.txt").read_text(encoding="utf-8")
 APACHE = (LIC / "Apache-2.0.txt").read_text(encoding="utf-8")
 MIT_FIX = (LIC / "MIT-en_cl_fix.md").read_text(encoding="utf-8")
 LICENSES = {"License.txt": PSI, "LGPL2_1.txt": LGPL}
+UVVM_COMPONENTS = ("uvvm_util", "uvvm_vvc_framework", "bitvis_vip_scoreboard", "bitvis_vip_clock_generator",
+                   "bitvis_vip_axilite", "bitvis_vip_axistream", "bitvis_vip_axi")
+TD = "uvvm_vvc_framework/src_target_dependent/td_queue_pkg.vhd"
+
+
+def uvvm_files() -> dict[str, str]:
+    """A UVVM repository: every component with its compile order; the VVC of axilite also uses a target file."""
+    files = {"LICENSE": APACHE, "uvvm_util/doc/manual.txt": "doc\n", TD: "-- td\n"}
+    for c in UVVM_COMPONENTS:
+        extra = f"../../{TD}\n" if c == "bitvis_vip_axilite" else ""
+        files[f"{c}/script/compile_order.txt"] = f"# library {c}\n../src/{c}_pkg.vhd\n{extra}"
+        files[f"{c}/src/{c}_pkg.vhd"] = f"-- {c}\n"
+    return files
 
 
 @pytest.fixture(scope="session")
@@ -36,8 +49,7 @@ def world_template(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("world")
     repos = tmp_path / "repos"
     uvvm = tmp_path / "uvvm"
-    uv = make_repo(uvvm, {"LICENSE": APACHE, "uvvm_util/src/uvvm_util_context.vhd": "-- util\n",
-                          "bitvis_vip_axilite/src/axilite_vvc.vhd": "-- vvc\n", "uvvm_util/doc/manual.txt": "doc\n"})
+    uv = make_repo(uvvm, uvvm_files())
     owr = make_repo(repos / "openwire", {**LICENSES, "compile_order.txt": "hdl/a.vhd\n", "hdl/a.vhd": "-- a\n",
                                          "sw/owr_regs.h": "#define OWR 1\n", "hdl/a_tb.vhd": "-- tb\n"},
                     {"uvvm": uv})
@@ -189,8 +201,9 @@ def test_the_manifest_lists_the_snapshot_files(world):
                                     "LGPL2_1.txt", "License.txt", "compile_order.txt", "src/c.vhd"]
     assert sorted(files["refsys"]) == ["LGPL2_1.txt", "License.txt", "sim/tb/rs_far_end.vhd",
                                        "systems/s/s.composer.json", "tools/composer_ref.txt"]
-    assert sorted(files["uvvm"]) == ["LICENSE", "bitvis_vip_axilite/src/axilite_vvc.vhd",
-                                     "uvvm_util/src/uvvm_util_context.vhd"]
+    assert sorted(files["uvvm"]) == sorted(
+        ["LICENSE", TD] + [f"{c}/script/compile_order.txt" for c in UVVM_COMPONENTS]
+        + [f"{c}/src/{c}_pkg.vhd" for c in UVVM_COMPONENTS])
 
 
 def load_snapshot():

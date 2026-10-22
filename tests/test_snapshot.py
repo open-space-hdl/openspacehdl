@@ -75,11 +75,43 @@ def test_reference_systems_selection():
                                                "systems/s/s.composer.json", "tools/ghdl.py"]
 
 
-def test_uvvm_selection():
-    tree = snapshot.Tree({"LICENSE": APACHE, "uvvm_util/src/a.vhd": b"", "uvvm_util/doc/a.pdf": b"",
-                          "bitvis_vip_axilite/src/b.vhd": b"", "bitvis_vip_axilite/LICENSE.TXT": APACHE,
-                          "bitvis_vip_spi/src/c.vhd": b"", "uvvm_vvc_framework/script/x/src/y": b""})
-    assert snapshot.select("uvvm", tree) == ["LICENSE", "bitvis_vip_axilite/src/b.vhd", "uvvm_util/src/a.vhd"]
+def uvvm_tree(**extra):
+    files = {"LICENSE": APACHE, "uvvm_util/doc/a.pdf": b"", "bitvis_vip_spi/src/c.vhd": b""}
+    for c in snapshot.UVVM_COMPONENTS:
+        files[f"{c}/script/compile_order.txt"] = f"# library {c}\n../src/{c}_pkg.vhd\n".encode()
+        files[f"{c}/src/{c}_pkg.vhd"] = b""
+    files["bitvis_vip_axilite/script/compile_order.txt"] = (
+        b"# library bitvis_vip_axilite\n../src/axilite_bfm_pkg.vhd\n"
+        b"../../uvvm_vvc_framework/src_target_dependent/td_queue_pkg.vhd\n")
+    files["bitvis_vip_axilite/src/axilite_bfm_pkg.vhd"] = b""
+    files["uvvm_vvc_framework/src_target_dependent/td_queue_pkg.vhd"] = b""
+    files["uvvm_vvc_framework/src_target_dependent/td_unused.vhd"] = b""
+    files.update(extra)
+    return snapshot.Tree(files)
+
+
+def test_uvvm_selection_follows_the_compile_orders():
+    sel = snapshot.select("uvvm", uvvm_tree())
+    assert "uvvm_vvc_framework/src_target_dependent/td_queue_pkg.vhd" in sel
+    assert "uvvm_vvc_framework/src_target_dependent/td_unused.vhd" not in sel
+    assert "bitvis_vip_axilite/src/bitvis_vip_axilite_pkg.vhd" not in sel
+    assert "bitvis_vip_spi/src/c.vhd" not in sel and "uvvm_util/doc/a.pdf" not in sel
+    assert "LICENSE" in sel and "uvvm_util/script/compile_order.txt" in sel
+    assert snapshot.uvvm_order(uvvm_tree(), "bitvis_vip_axilite") == [
+        "bitvis_vip_axilite/src/axilite_bfm_pkg.vhd", "uvvm_vvc_framework/src_target_dependent/td_queue_pkg.vhd"]
+
+
+def test_uvvm_without_a_compile_order():
+    tree = uvvm_tree()
+    files = {p: tree.read(p) for p in tree.paths() if p != "uvvm_util/script/compile_order.txt"}
+    with pytest.raises(snapshot.InputError, match="no uvvm_util/script/compile_order.txt"):
+        snapshot.select("uvvm", snapshot.Tree(files))
+
+
+def test_uvvm_compile_order_with_a_missing_file():
+    tree = uvvm_tree(**{"uvvm_util/script/compile_order.txt": b"../src/missing.vhd\n"})
+    with pytest.raises(snapshot.InputError, match="uvvm_util/src/missing.vhd"):
+        snapshot.select("uvvm", tree)
 
 
 def files_of(**trees):
@@ -87,7 +119,7 @@ def files_of(**trees):
 
 
 def test_licences_of_a_complete_snapshot():
-    files = files_of(x=("core", core_tree()), uvvm=("uvvm", snapshot.Tree({"LICENSE": APACHE})))
+    files = files_of(x=("core", core_tree()), uvvm=("uvvm", uvvm_tree()))
     assert snapshot.check_licenses(files, EXPRESSION, LICENSE_FILES) == {"LicenseRef-PSI-HDL-1.0", "Apache-2.0"}
 
 
@@ -104,7 +136,7 @@ def test_a_licence_file_with_another_text():
 
 
 def test_an_expression_that_misses_a_licence():
-    files = files_of(uvvm=("uvvm", snapshot.Tree({"LICENSE": APACHE})))
+    files = files_of(uvvm=("uvvm", uvvm_tree()))
     with pytest.raises(snapshot.SnapshotError, match="does not name Apache-2.0"):
         snapshot.check_licenses(files, "MIT AND LicenseRef-PSI-HDL-1.0", LICENSE_FILES)
 
