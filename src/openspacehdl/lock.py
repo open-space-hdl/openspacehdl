@@ -263,6 +263,8 @@ class Lock:
     refsys_commit: str
     olo_tag: str
     olo_commit: str
+    olo_library: str
+    olo_file_list: str
     uvvm_commit: str
     cores: tuple[Core, ...]
     # snapshot directory -> path -> SHA-256
@@ -286,6 +288,8 @@ class Lock:
             refsys_commit=d["referenceSystems"]["commit"],
             olo_tag=d["openLogic"]["tag"],
             olo_commit=d["openLogic"]["commit"],
+            olo_library=d["openLogic"]["library"],
+            olo_file_list=d["openLogic"]["fileList"],
             uvvm_commit=d["uvvm"]["commit"],
             cores=tuple(
                 Core(
@@ -307,6 +311,6 @@ def load() -> Lock:
     if not f.is_file():
         from openspacehdl import __version__
 
-        raise LockError(f"openspacehdl {__version__} carries no lock manifest: this version lists the family only "
-                        f"and contains no cores")
+        raise LockError(f"version {__version__} carries no lock manifest: it lists the family only and contains no "
+                        f"cores")
     return Lock.from_dict(json.loads(f.read_text(encoding="utf-8")))

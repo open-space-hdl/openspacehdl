@@ -32,6 +32,26 @@ openspacehdl info OpenFibre     # one project, by name or repository name
 The list comes from the project cards of [openspacehdl.org](https://openspacehdl.org) at the time of the release.
 A project that is not yet public is listed as "Coming soon", without links.
 
+## VUnit (from the first version with cores)
+
+A version with cores carries them with Open Logic FT and UVVM at the versions its lock manifest pins
+(`openspacehdl lock` shows them), and adds them to a VUnit project:
+
+```python
+from vunit import VUnit
+import openspacehdl as osh
+
+vu = VUnit.from_argv()
+vu.add_vhdl_builtins()
+osh.add_core(vu, "openfibre")   # the libraries olo and openfibre
+osh.add_core(vu, "openrmap")    # reuses olo
+osh.add_uvvm(vu)                # UVVM components, each as its own library
+vu.main()
+```
+
+Every core of one package version uses the same Open Logic FT; `add_core` refuses a library `olo` that it did not
+add itself.
+
 ## Development
 
 The design of the next phase is in [docs/design.md](docs/design.md).
