@@ -15,6 +15,11 @@ All notable changes of the package. Versions follow [semantic versioning](https:
 - `openspacehdl.add_core(vu, core)` and `openspacehdl.add_uvvm(vu)` for VUnit, with the errors `UnknownCoreError`,
   `OpenLogicConflictError` and `LibraryConflictError`; `openspacehdl lock` shows the lock manifest.
 
+- `openspacehdl.composer.load()`: reads a saved system of the Composer with its export and refuses it, with every
+  reason, when it breaks the schema, has problems or error checks, an unknown layout, an export of another state,
+  pins other than the lock manifest or an external interface the generated testbench does not support;
+  `openspacehdl.jsonschema` validates the schema keywords the Composer uses.
+
 ### Fixed
 
 - The UVVM snapshot follows the compile order of each component and carries the target-dependent files of the VVC
