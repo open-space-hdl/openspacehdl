@@ -89,11 +89,20 @@ def main(argv: list[str] | None = None) -> int:
     p_info = sub.add_parser("info", help="list the projects of the family, as the website shows them")
     p_info.add_argument("project", nargs="?", help="show only this project (name or repository)")
     sub.add_parser("lock", help="show the cores, Open Logic FT and UVVM this package version pins")
+    p_export = sub.add_parser("export", help="write the sources as a plain tree, or as Git repositories (--git)")
+    p_export.add_argument("dir", help="target directory, new or empty")
+    p_export.add_argument("--git", action="store_true", help="Git clones with their history, from the bundles")
+    p_export.add_argument("--core", action="append", metavar="CORE",
+                          help="export only this core and Open Logic FT (repeatable)")
     args = parser.parse_args(argv)
 
     if args.command == "info":
         return info(load(), args.project)
     if args.command == "lock":
         return show_lock()
+    if args.command == "export":
+        from openspacehdl import export
+
+        return export.main(args.dir, args.core, args.git)
     parser.print_help()
     return 0

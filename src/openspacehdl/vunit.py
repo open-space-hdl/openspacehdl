@@ -16,15 +16,13 @@ import VUnit; it works with the VUnit object it is given (VUnit 4.7 and 5.0).
 
 from __future__ import annotations
 
-import hashlib
 import posixpath
 import re
-from dataclasses import dataclass
-from importlib import resources
 from pathlib import Path
 
 from openspacehdl import lock as _lock
 from openspacehdl.errors import OshError
+from openspacehdl.installed import Installed, installed  # noqa: F401 (installed: replaced by tests)
 
 # Analysis flags of GHDL for Open Logic FT, UVVM and the simulation models of vendor adapters, as the regressions of
 # the cores use them: they declare shared variables of non-protected types. The sources of a core are analysed as
@@ -43,18 +41,6 @@ class LibraryConflictError(OshError):
 
 class OpenLogicConflictError(OshError):
     """The VUnit project already has a library olo that openspacehdl did not add."""
-
-
-@dataclass(frozen=True)
-class Installed:
-    """The lock manifest and the directory of the source snapshots of the installed package."""
-
-    lock: _lock.Lock
-    hdl: Path
-
-
-def installed() -> Installed:
-    return Installed(_lock.load(), Path(str(resources.files("openspacehdl").joinpath("hdl"))))
 
 
 def _key(text: str) -> str:
@@ -102,20 +88,6 @@ def _existing(vu) -> set[str]:
     return {lib.name for lib in vu.get_libraries("*", allow_empty=True)}
 
 
-def _verified(inst: Installed, snapshot: str, paths: list[str]) -> list[Path]:
-    """The installed files of these snapshot paths, each checked against the hash of the manifest."""
-    entries = inst.lock.files.get(snapshot, {})
-    out = []
-    for p in paths:
-        f = inst.hdl / snapshot / p
-        expected = entries.get(p)
-        if expected is None or not f.is_file() or hashlib.sha256(f.read_bytes()).hexdigest() != expected:
-            raise OshError(f"{snapshot}/{p} is missing or differs from the lock manifest: the installation of "
-                           f"openspacehdl is damaged; install the package again")
-        out.append(f)
-    return out
-
-
 def _add_library(vu, name: str, files: list[Path], relaxed: set[Path] | None = None):
     """A new library with these files; GHDL analyses the files in relaxed (all when None) with RELAXED_GHDL_FLAGS."""
     lib = vu.add_library(name, vhdl_standard="2008")
@@ -138,7 +110,7 @@ def _add_open_logic(vu, inst: Installed) -> None:
                                      f"openspacehdl uses Open Logic FT {inst.lock.olo_tag} for every core and never "
                                      f"mixes two Open Logic versions in one project")
     paths = read_list(inst.hdl / "olo" / inst.lock.olo_file_list)
-    _add_library(vu, name, _verified(inst, "olo", [inst.lock.olo_file_list] + paths)[1:])
+    _add_library(vu, name, inst.verified("olo", [inst.lock.olo_file_list] + paths)[1:])
     marks[name] = "olo"
 
 
@@ -165,7 +137,7 @@ def add_core(vu, core: str, *, models: bool = True):
     if models:
         for model_list in c.models.values():
             paths += [model_list] + [p for p in read_list(inst.hdl / c.id / model_list) if p not in paths]
-    files = _verified(inst, c.id, paths)
+    files = inst.verified(c.id, paths)
     lists = {c.file_list, *c.models.values()}
     model_files = {f for f, p in zip(files[sources:], paths[sources:]) if p not in lists}
     lib = _add_library(vu, c.library, [f for f, p in zip(files, paths) if p not in lists], relaxed=model_files)
@@ -200,7 +172,7 @@ def add_uvvm(vu) -> dict:
                                        f"add")
         base = posixpath.dirname(order)
         paths = [posixpath.normpath(f"{base}/{p}") for p in read_list(inst.hdl / "uvvm" / order)]
-        lib = _add_library(vu, name, _verified(inst, "uvvm", [order] + paths)[1:])
+        lib = _add_library(vu, name, inst.verified("uvvm", [order] + paths)[1:])
         marks[name] = "uvvm"
         out[name] = lib
     return out

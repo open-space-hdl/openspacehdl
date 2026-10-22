@@ -20,7 +20,8 @@ later steps; such a wheel is evidence of the build only and is never released.
 --deep adds the deep install test (docs/design.md, section 9): a virtual environment of --deep-python below <dir>
 whose site-packages path is exactly as long as the install prefix of [tool.openspacehdl] (120 characters), the wheel
 installed into it without network, VUnit installed with each --vunit-install (arguments of pip install), and a VUnit
-project that adds every core of the lock and UVVM and compiles them in GHDL (VUNIT_SIMULATOR=ghdl, 2 parallel jobs).
+project that adds every core of the lock and UVVM and compiles them in GHDL (VUNIT_SIMULATOR=ghdl, 2 parallel jobs),
+then openspacehdl export into <dir>/export-tree and openspacehdl export --git into <dir>/export-git.
 
 Exit status 0 only when every gate passed.
 """
@@ -142,6 +143,17 @@ def deep_install(args, wheel: Path, project: dict) -> int:
         print((r.stdout + r.stderr).rstrip()[-6000:])
         return 1
     print(f"ok   deep compile with VUnit {version}: every core of the lock and UVVM compiled in GHDL")
+    for name, extra in (("export-tree", []), ("export-git", ["--git"])):
+        target = base / name
+        if target.exists():
+            _remove(target)
+        cmd = [str(vpy), "-m", "openspacehdl", "export", str(target), *extra]
+        r = subprocess.run(cmd, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if r.returncode != 0:
+            print(f"FAIL deep {name} (exit status {r.returncode}): {' '.join(cmd)}")
+            print((r.stdout + r.stderr).rstrip()[-4000:])
+            return 1
+        print(f"ok   deep {name}: {r.stdout.strip()}")
     return 0
 
 

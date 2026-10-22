@@ -52,6 +52,9 @@ vu.main()
 Every core of one package version uses the same Open Logic FT; `add_core` refuses a library `olo` that it did not
 add itself.
 
+`openspacehdl export <dir>` writes the sources as a plain tree; `openspacehdl export <dir> --git` writes them as Git
+repositories with their history up to the pinned releases, without network.
+
 ## Development
 
 The design of the next phase is in [docs/design.md](docs/design.md).
@@ -71,9 +74,10 @@ python -m build
 a release tag of reference-systems and the clones of the repositories, and stops when the pins are not consistent;
 `--report` lists the violations, `--check` compares.
 
-`tools/snapshot.py` writes the source snapshots of the manifest into `src/openspacehdl/hdl/` (not tracked) and checks
-their hashes, licences and path lengths; `tools/wheel_check.py <wheel>` checks a built wheel against the manifest it
-carries (rules L6 to L9 of docs/design.md).
+`tools/snapshot.py` writes the source snapshots of the manifest into `src/openspacehdl/hdl/` and the Git bundles into
+`src/openspacehdl/bundles/` (`tools/bundles.py`; both not tracked) and checks their hashes, licences and path
+lengths; `tools/wheel_check.py <wheel>` checks a built wheel against the manifest it carries (rules L6 to L9 of
+docs/design.md).
 
 `python tools/check.py [--site <clone of open-space-hdl.github.io>]` runs the quality gates (pytest, markdownlint,
 no em-dash, family data) and fails on the exit status of the first gate that fails. `python tools/check.py

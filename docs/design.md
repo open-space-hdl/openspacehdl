@@ -429,17 +429,26 @@ The files of the Composer export in `hdl/` keep the header the Composer wrote an
 ## 7. export
 
 - `openspacehdl export <dir> [--core <core> ...]` writes the source snapshots as a plain tree:
-  `<dir>/<repository>/...` with the compile order of every repository and `<dir>/openspacehdl-lock.json`. A build
-  flow for Vivado or Libero reads the files from there.
-- `openspacehdl export <dir> --git` clones every repository from its bundle into `<dir>/<repository>`, checked out at
-  the pinned tag, with its history up to that tag. The submodule URLs point at the
-  neighbouring clones, so `git submodule update` works without network. The procedure is that of
-  `tools/make_offline_bundle.py` of reference-systems, including its final check: clone with only file transports
-  allowed and compare every commit with the manifest.
+  `<dir>/<repository>/...` with the compile order of every repository, UVVM in `<dir>/uvvm`, and
+  `<dir>/openspacehdl-lock.json`. Every file is checked against the manifest first. A build flow for Vivado or Libero
+  reads the files from there.
+- `openspacehdl export <dir> --git [--core <core> ...]` clones every repository from its bundle into
+  `<dir>/<repository>`, checked out at the pinned commit, with its history up to that commit. Open Logic FT gets its
+  submodule `3rdParty/en_cl_fix` from the bundle of en_cl_fix; reference-systems gets its submodules
+  `cores/<repository>` from the neighbouring clones, and the nested en_cl_fix of its Open Logic FT as well. All of it
+  works without network (local file transport only). The remote `origin` of every clone and the submodule URLs are
+  then set back to the published repositories, so a later `git fetch` works when network is available. The export
+  checks that every clone and every submodule is at the commit the manifest and the superproject record. UVVM has no
+  bundle; its snapshot is in the tree export.
+- With `--core`, only the named cores and Open Logic FT are exported, without reference-systems and UVVM. The target
+  directory must be new or empty; the export never writes into a directory with content.
 
-Each bundle carries the pinned tag with its history, the release tags in that history and the branch `main` (for Open
-Logic FT `fault-tolerant`) at the pinned tag. It never carries other branches, neither later commits of the
-published branches nor local branches of the machine that built the package.
+The bundles are `<id>.bundle` in `openspacehdl/bundles/`: one per core, `olo` for Open Logic FT, `en_cl_fix` for its
+submodule and `refsys` for reference-systems. Each bundle carries the pinned commit with its history: the branch
+`main` (Open Logic FT `fault-tolerant`, en_cl_fix `open-logic`) at the pinned commit and every published tag in that
+history. It never carries other branches, later commits of the published branches or local refs of the machine that
+built the package. A bundle is made from a temporary bare copy of the clone, so the clone itself is only read. The
+manifest records the refs of every bundle, and the wheel check compares them with `git bundle list-heads` (rule L6).
 
 ## 8. serve
 
