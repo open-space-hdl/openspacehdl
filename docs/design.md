@@ -211,12 +211,25 @@ A trial build with this form passes: setuptools accepts the expression (`packagi
 one `License-File` entry per file into the metadata and copies the files to `.dist-info/licenses/`, and
 `twine check --strict` passes. Rule L7 keeps the expression and the files complete when a repository is added.
 
-The portal adds the licences of the website: MIT for its code (site and Composer) and Creative Commons Attribution
-4.0 for its texts and images. With the portal in the wheel the expression becomes
-`MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0 AND CC-BY-4.0`, with the licence files of the website repository in
-`license-files`. The documentation sites are content of the cores and come under their licence; the libraries of the
-MkDocs theme in the sites are named by rule L7 as well. The Git bundles carry the licence files of their
-repositories in their trees.
+The portal carries content under further licences:
+
+| Portal content | Licence |
+| --- | --- |
+| Code of the website and the Composer | MIT |
+| Texts and images of the website | Creative Commons Attribution 4.0 |
+| Logo, favicon and touch icon of Open Space HDL (on the website and in every documentation site) | All rights reserved; no licence is granted |
+| Fonts (Sora, JetBrains Mono), each with its licence file | SIL Open Font License 1.1 |
+| Documentation sites of the cores | the licence of the core |
+| Assets of the MkDocs theme and other third-party files | their own licences |
+
+For the portal, rule L7 works with a licence map: every file of the portal matches exactly one entry of the map (a
+path pattern and its licence), every licence of the map is named in the expression with its licence or notice file
+in `license-files`, and the build stops when a file matches no entry. The logo files are named with
+`LicenseRef-OpenSpaceHDL-Logo` and a notice file that states the reservation; they are never covered by the CC BY
+entry. With the portal in the wheel the expression becomes, for example,
+`MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0 AND CC-BY-4.0 AND OFL-1.1 AND LicenseRef-OpenSpaceHDL-Logo`, extended
+by the licences the map finds for the theme assets. The Git bundles carry the licence files of their repositories in
+their trees.
 
 ### 4.5 Path length
 
@@ -476,4 +489,4 @@ The tests run on Windows and Linux. Phase A is complete when every level passes.
 | O4 | Which virtual channel of a SpaceFibre link carries the RMAP target. | Decided: traced in the resolved netlist from the target to the port; `new` refuses when it cannot. |
 | O5 | The documentation sites are built at the tags of the cores, with their own MkDocs toolchains. | Decided: every site is built in its own environment with the pinned requirements of `tools/docs` of the core at its tag. |
 | O6 | Linux tests while the repository is private and has no CI. | Decided: they run locally in WSL until the CI exists. |
-| O7 | The website repository has no licence file, so the licence of the website content and of the Composer in the portal is not stated. | Decided: MIT for the code, CC BY 4.0 for the texts and images (section 4.4). The portal enters the wheel once the website repository carries the licence files. |
+| O7 | The website repository has no licence file, so the licence of the website content and of the Composer in the portal is not stated. | Decided: MIT for the code, CC BY 4.0 for the texts and images; logo, favicon and touch icon stay all rights reserved; third-party fonts and assets keep their licences (section 4.4). The portal enters the wheel once the website repository carries the licence files. |
