@@ -110,6 +110,7 @@ The build of the package stops with an error when one of these rules fails:
 | L6 | The hashes in `files` match the files of the snapshots in the wheel. |
 | L7 | The licence files of every snapshot repository are in the wheel, listed in `license-files`, and their licence is named in the licence expression of the wheel (section 4.4). |
 | L8 | The longest path in the wheel stays within the path budget of section 4.5. |
+| L9 | The wheel stays below the file size limit of the project on PyPI (section 4.3). |
 
 The `verifiedWith` tag of a core may differ from the Open Logic tag of the manifest: the reference systems are
 verified with that tag. `openspacehdl lock` and `add_core` show both.
@@ -170,22 +171,17 @@ Measured on the pins of website 1b3d619 and reference-systems v0.1.0 (compressed
 | Source snapshots, compile order files of all repositories | 4.2 MB | 0.9 MB |
 | Whole trees without testbenches (for comparison; Open Logic FT alone 24 MB, of which 17.5 MB PNG images of its documentation) | 39 MB | 20 MB |
 | UVVM components (`src/` only) | 2.6 MB | about 0.6 MB (estimate) |
-| Git bundles: published branches and tags of all repositories | 27 MB | 27 MB (already compressed); Open Logic FT 20 MB with the upstream history, every core 0.5 to 2.2 MB |
+| Git bundles: each pinned tag with its history (all published branches and tags: 27.3 MB; the tagged commit alone: 20.7 MB) | 26.8 MB | 26.8 MB (already compressed); Open Logic FT 20.2 MB, of which most is the documentation images of the tagged tree; every core 0.45 to 2.1 MB |
 | Website (`_site`) | 4.2 MB | about 1.5 MB (estimate) |
 | Documentation sites (MkDocs): OpenRMAP measured 5.3 MB; Open Logic FT carries the 17.5 MB of images | about 60 MB for all | about 30 MB (estimate) |
 
-One wheel with everything would be about 60 MB, under the default PyPI limit of 100 MB per file, but it grows with
-every core and every documentation page, and a CI job that only needs `add_core` would download it on every run.
-The design therefore uses three distributions with the same version, each pinned exactly by the first:
+The package is one wheel with all of it, about 60 MB at the current pins, so that one file brings everything to a
+machine without network. It is below the default PyPI limit of 100 MB per file and grows by about 5 to 8 MB with
+every new core (sources, bundle, documentation). The build checks the size of the wheel against the file limit of
+the project on PyPI (rule L9); before the wheel reaches it, the limit is raised on request at PyPI.
 
-| Distribution | Content | Size |
-| --- | --- | --- |
-| `openspacehdl` | code, lock manifest, source snapshots, UVVM components, bench components, templates | about 2 MB |
-| `openspacehdl-portal` | website, documentation sites, Composer | about 30 MB |
-| `openspacehdl-bundles` | Git bundles | about 27 MB |
-
-`pip install openspacehdl[offline]` installs all three; `openspacehdl serve` and `openspacehdl export --git` name the
-missing distribution when it is not installed. This split is open point O1.
+A bundle without history (only the tagged commit) would save about 6 MB, because the documentation images of Open
+Logic FT are part of the tagged tree itself. The bundles keep the history up to the pinned tag.
 
 ### 4.4 Licences
 
@@ -213,9 +209,14 @@ license-files = [
 
 A trial build with this form passes: setuptools accepts the expression (`packaging.licenses` validates it), writes
 one `License-File` entry per file into the metadata and copies the files to `.dist-info/licenses/`, and
-`twine check --strict` passes. Rule L7 keeps the expression and the files complete when a repository is added. The
-same rule applies to `openspacehdl-portal` and `openspacehdl-bundles` with the licences of their content (open point
-O7).
+`twine check --strict` passes. Rule L7 keeps the expression and the files complete when a repository is added.
+
+The portal adds the licences of the website: MIT for its code (site and Composer) and Creative Commons Attribution
+4.0 for its texts and images. With the portal in the wheel the expression becomes
+`MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0 AND CC-BY-4.0`, with the licence files of the website repository in
+`license-files`. The documentation sites are content of the cores and come under their licence; the libraries of the
+MkDocs theme in the sites are named by rule L7 as well. The Git bundles carry the licence files of their
+repositories in their trees.
 
 ### 4.5 Path length
 
@@ -412,18 +413,19 @@ The files of the Composer export in `hdl/` keep the header the Composer wrote an
   `<dir>/<repository>/...` with the compile order of every repository and `<dir>/openspacehdl-lock.json`. A build
   flow for Vivado or Libero reads the files from there.
 - `openspacehdl export <dir> --git` clones every repository from its bundle into `<dir>/<repository>`, checked out at
-  the pinned tag, with the full history of the published branches and tags. The submodule URLs point at the
+  the pinned tag, with its history up to that tag. The submodule URLs point at the
   neighbouring clones, so `git submodule update` works without network. The procedure is that of
   `tools/make_offline_bundle.py` of reference-systems, including its final check: clone with only file transports
   allowed and compare every commit with the manifest.
 
-The bundles carry only published refs (the release branch, the tags and, for Open Logic FT, its fault-tolerant branch
-with its tags), never local branches of the machine that built the package.
+Each bundle carries the pinned tag with its history, the release tags in that history and the branch `main` (for Open
+Logic FT `fault-tolerant`) at the pinned tag. It never carries other branches, neither later commits of the
+published branches nor local branches of the machine that built the package.
 
 ## 8. serve
 
-`openspacehdl serve [--port <n>] [--no-browser]` serves the content of `openspacehdl-portal` with the standard
-library's HTTP server and opens the browser:
+`openspacehdl serve [--port <n>] [--no-browser]` serves the portal of the package (`openspacehdl/portal/`) with the
+standard library's HTTP server and opens the browser:
 
 - it binds to 127.0.0.1 only; phase A has no option for another address;
 - `/` is the website, `/<repository>/` the documentation of each core at its pinned tag, `/composer/` the Composer
@@ -468,10 +470,10 @@ The tests run on Windows and Linux. Phase A is complete when every level passes.
 
 | ID | Point | State |
 | --- | --- | --- |
-| O1 | Distributions: one wheel or three (section 4.3). The cores and reference-systems are in the package either way: their source snapshots in `openspacehdl`, their full Git repositories in `openspacehdl-bundles`. The two further names on PyPI are claimed with their first upload. | Proposed: three distributions. Open. |
+| O1 | Distributions: one wheel or three (section 4.3). | Decided: one wheel with the snapshots, the Git bundles and the portal; the bundles keep the history up to the pinned tag. |
 | O2 | The first version with content needs a consistent set. With website 1b3d619 and reference-systems v0.1.0, rule L2 fails for OpenCompact (catalog v0.1.1, reference-systems v0.1.0), and v0.1.0 has no `tools/composer_ref.txt` (rule L4). | Decided: the first version with content is built on the next reference-systems release that carries the catalog pins. |
 | O3 | `resolved.version` of the Composer is decided but not yet written into saved files. | Decided: the Composer writes it from generator 0.9.8-beta on; the package refuses an unknown version. For files of older generators it validates against the schema and warns on a generator version it was not tested with. |
 | O4 | Which virtual channel of a SpaceFibre link carries the RMAP target. | Decided: traced in the resolved netlist from the target to the port; `new` refuses when it cannot. |
 | O5 | The documentation sites are built at the tags of the cores, with their own MkDocs toolchains. | Decided: every site is built in its own environment with the pinned requirements of `tools/docs` of the core at its tag. |
 | O6 | Linux tests while the repository is private and has no CI. | Decided: they run locally in WSL until the CI exists. |
-| O7 | The website repository has no licence file, so the licence of the website content and of the Composer in `openspacehdl-portal` is not stated. | Open: needs a licence for the website repository before the portal is published. |
+| O7 | The website repository has no licence file, so the licence of the website content and of the Composer in the portal is not stated. | Decided: MIT for the code, CC BY 4.0 for the texts and images (section 4.4). The portal enters the wheel once the website repository carries the licence files. |
