@@ -117,7 +117,7 @@ def load_snapshot():
 
 def snap_args(w, out, *extra):
     return ["--repos", str(w["repos"]), "--uvvm", str(w["uvvm"]), "--lock", str(w["tmp"] / "lock.json"),
-            "--out", str(out), *extra]
+            "--out", str(out), "--bundles-out", str(w["tmp"] / "bundles"), *extra]
 
 
 def test_snapshot_writes_every_file_byte_for_byte(world):
@@ -180,3 +180,9 @@ def test_a_waived_rule_is_recorded_and_refused_by_the_snapshot(world, capsys):
 def test_an_unknown_rule_cannot_be_waived(world, capsys):
     assert load_tool().main(args(world, "--waive", "L99")) == 1
     assert "unknown rules to waive: L99" in capsys.readouterr().err
+
+
+def test_the_tests_do_not_write_into_the_package():
+    """The snapshot and bundle outputs of the tests stay in their temporary directories."""
+    pkg = world.ROOT / "src" / "openspacehdl"
+    assert not (pkg / "hdl").exists() and not (pkg / "bundles").exists()
