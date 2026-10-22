@@ -26,9 +26,10 @@ from pathlib import Path
 from openspacehdl import lock as _lock
 from openspacehdl.errors import OshError
 
-# Analysis flags of GHDL for UVVM: it uses shared variables of non-protected types. A testbench that uses UVVM also
-# needs -frelaxed at elaboration (VUnit sim option ghdl.elab_flags).
-UVVM_GHDL_FLAGS = ("-frelaxed", "-Wno-hide", "-Wno-shared")
+# Analysis flags of GHDL for Open Logic FT, UVVM and the simulation models of vendor adapters, as the regressions of
+# the cores use them: they declare shared variables of non-protected types. The sources of a core are analysed as
+# strict VHDL-2008. A testbench that uses UVVM also needs -frelaxed at elaboration (VUnit sim option ghdl.elab_flags).
+RELAXED_GHDL_FLAGS = ("-frelaxed", "-Wno-hide", "-Wno-shared")
 _MARK = "_openspacehdl_libraries"
 
 
@@ -115,10 +116,15 @@ def _verified(inst: Installed, snapshot: str, paths: list[str]) -> list[Path]:
     return out
 
 
-def _add_library(vu, name: str, files: list[Path]):
+def _add_library(vu, name: str, files: list[Path], relaxed: set[Path] | None = None):
+    """A new library with these files; GHDL analyses the files in relaxed (all when None) with RELAXED_GHDL_FLAGS."""
     lib = vu.add_library(name, vhdl_standard="2008")
     for f in files:
-        lib.add_source_file(str(f), vhdl_standard="2008")
+        source = lib.add_source_file(str(f), vhdl_standard="2008")
+        if relaxed is not None and f in relaxed:
+            source.add_compile_option("ghdl.a_flags", list(RELAXED_GHDL_FLAGS))
+    if relaxed is None:
+        lib.add_compile_option("ghdl.a_flags", list(RELAXED_GHDL_FLAGS))
     return lib
 
 
@@ -142,7 +148,8 @@ def add_core(vu, core: str, *, models: bool = True):
     The library takes the name from the lock manifest (for example openfibre) and the files of the core's compile
     order, VHDL-2008. With models, the simulation models of the core's vendor adapters are added as well (for
     OpenFibre the entity ofb_pa_gty with its behavioural architecture mdl), so that GHDL simulates the core without
-    vendor libraries. Adding the same core again returns its library.
+    vendor libraries. GHDL analyses Open Logic FT and the models with RELAXED_GHDL_FLAGS and the sources of the core
+    as strict VHDL-2008. Adding the same core again returns its library.
     """
     inst = installed()
     c = _find(inst, core)
@@ -154,12 +161,14 @@ def add_core(vu, core: str, *, models: bool = True):
                                    f"add")
     _add_open_logic(vu, inst)
     paths = [c.file_list] + read_list(inst.hdl / c.id / c.file_list)
+    sources = len(paths)
     if models:
         for model_list in c.models.values():
             paths += [model_list] + [p for p in read_list(inst.hdl / c.id / model_list) if p not in paths]
     files = _verified(inst, c.id, paths)
     lists = {c.file_list, *c.models.values()}
-    lib = _add_library(vu, c.library, [f for f, p in zip(files, paths) if p not in lists])
+    model_files = {f for f, p in zip(files[sources:], paths[sources:]) if p not in lists}
+    lib = _add_library(vu, c.library, [f for f, p in zip(files, paths) if p not in lists], relaxed=model_files)
     marks[c.library] = c.id
     if c.verified_with and c.verified_with != inst.lock.olo_tag:
         print(f"openspacehdl: {c.name} {c.tag} was verified with Open Logic FT {c.verified_with}; this package uses "
@@ -172,7 +181,7 @@ def add_uvvm(vu) -> dict:
 
     Every component gets the files of its compile order (script/compile_order.txt of UVVM); the VVC components
     compile the target-dependent files of the VVC framework into their own libraries, as UVVM requires. GHDL
-    analyses them with UVVM_GHDL_FLAGS.
+    analyses them with RELAXED_GHDL_FLAGS.
     """
     inst = installed()
     marks = _marks(vu)
@@ -192,7 +201,6 @@ def add_uvvm(vu) -> dict:
         base = posixpath.dirname(order)
         paths = [posixpath.normpath(f"{base}/{p}") for p in read_list(inst.hdl / "uvvm" / order)]
         lib = _add_library(vu, name, _verified(inst, "uvvm", [order] + paths)[1:])
-        lib.add_compile_option("ghdl.a_flags", list(UVVM_GHDL_FLAGS))
         marks[name] = "uvvm"
         out[name] = lib
     return out

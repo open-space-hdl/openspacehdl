@@ -269,8 +269,9 @@ vu.main()
   tags; it is not an error.
 - `add_uvvm(vu)` adds the UVVM components of section 4.2, each as the library its compile order names, with the
   files of that compile order; it sets the GHDL analysis flags UVVM needs (`-frelaxed`, `-Wno-hide`, `-Wno-shared`)
-  on these libraries. A testbench that uses UVVM also needs `-frelaxed` at elaboration (`ghdl.elab_flags`); the
-  generated `run.py` of a project sets it.
+  on these libraries, as `add_core` does on `olo` and on the simulation models (the regressions of the cores do the
+  same; the sources of a core are analysed strictly). A testbench that uses UVVM also needs `-frelaxed` at
+  elaboration (`ghdl.elab_flags`); the generated `run.py` of a project sets it.
 - Before it adds a file, every call checks it against the SHA-256 of the lock manifest.
 - `add_system(vu, project_dir)` adds a generated project (section 6): the libraries and files of the system's compile
   order (`hdl/<system>_compile_order.txt`, the file set the Composer exported), read from the snapshots of the

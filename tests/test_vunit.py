@@ -9,15 +9,27 @@ import openspacehdl as osh
 from openspacehdl import lock, vunit
 
 
+class Source:
+    def __init__(self, name):
+        self.name = name
+        self.options = []
+
+    def add_compile_option(self, name, value):
+        self.options.append((name, value))
+
+
 class Lib:
     def __init__(self, name):
         self.name = name
         self.files = []
+        self.sources = {}
         self.options = []
 
     def add_source_file(self, file_name, vhdl_standard=None):
         assert vhdl_standard == "2008"
         self.files.append(file_name)
+        self.sources[file_name] = Source(file_name)
+        return self.sources[file_name]
 
     def add_compile_option(self, name, value):
         self.options.append((name, value))
@@ -42,6 +54,7 @@ class FakeVUnit:
         return list(self.libs.values())
 
 
+RELAXED = ["-frelaxed", "-Wno-hide", "-Wno-shared"]
 TREE = {
     "olo": {"compile_order.txt": "src/olo_base_pkg.vhd\n3rdParty/en_cl_fix/hdl/en_cl_fix_pkg.vhd\n",
             "src/olo_base_pkg.vhd": "-- olo\n", "3rdParty/en_cl_fix/hdl/en_cl_fix_pkg.vhd": "-- fix\n"},
@@ -108,6 +121,8 @@ def test_add_core_adds_open_logic_and_the_core(inst):
                                                "olo/3rdParty/en_cl_fix/hdl/en_cl_fix_pkg.vhd"]
     assert lib is vu.libs["openwire"]
     assert rel(inst, lib.files) == ["openwire/hdl/owr_pkg.vhd", "openwire/hdl/owr_core.vhd"]
+    assert vu.libs["olo"].options == [("ghdl.a_flags", RELAXED)]
+    assert lib.options == [] and all(s.options == [] for s in lib.sources.values())
 
 
 def test_a_second_core_reuses_open_logic(inst, capsys):
@@ -119,6 +134,9 @@ def test_a_second_core_reuses_open_logic(inst, capsys):
     assert vu.libs["olo"].files == olo_files
     assert rel(inst, lib.files) == ["openfibre/hdl/ofb_core.vhd", "openfibre/tb/ofb_tb_8b10b_pkg.vhd",
                                     "openfibre/hdl/ofb_pa_gty/src/ofb_pa_gty.vhd"]
+    relaxed = sorted(rel(inst, [n for n, s in lib.sources.items() if s.options == [("ghdl.a_flags", RELAXED)]]))
+    assert relaxed == ["openfibre/hdl/ofb_pa_gty/src/ofb_pa_gty.vhd", "openfibre/tb/ofb_tb_8b10b_pkg.vhd"]
+    assert lib.options == []
     out = capsys.readouterr().out
     assert "OpenFibre v0.1.1 was verified with Open Logic FT 4.7.0-ft.6; this package uses 4.7.0-ft.8" in out
     assert "OpenWire" not in out
@@ -192,7 +210,7 @@ def test_add_uvvm(inst):
         "uvvm/uvvm_vvc_framework/src_target_dependent/td_queue_pkg.vhd"]
     assert rel(inst, libs["uvvm_util"].files) == ["uvvm/uvvm_util/src/types_pkg.vhd"]
     for lib in libs.values():
-        assert lib.options == [("ghdl.a_flags", ["-frelaxed", "-Wno-hide", "-Wno-shared"])]
+        assert lib.options == [("ghdl.a_flags", RELAXED)]
     assert osh.add_uvvm(vu)["uvvm_util"] is libs["uvvm_util"]
 
 
