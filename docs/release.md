@@ -21,9 +21,6 @@ section 3). A release branch starts only when:
   `tools/portal/constraints/`. A changed `tests/jekyll/Gemfile` of the website, or a changed requirements file of a
   documentation site, needs a run with `--pin` and a review of its changes in a pull request to `develop`.
 
-Before 0.1.0 one gap of the tools is closed, in a pull request to `develop`: `pyproject.toml` declares the optional
-dependency `vunit` (`openspacehdl[vunit]`, design.md section 5.2).
-
 ## 2. Release branch
 
 `release/<version>` starts from `develop` and changes:
