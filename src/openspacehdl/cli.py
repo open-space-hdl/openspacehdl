@@ -104,6 +104,10 @@ def main(argv: list[str] | None = None) -> int:
     p_update.add_argument("--hdl", help="directory of the export of --from")
     p_update.add_argument("--dry-run", action="store_true", help="list what update would do, change nothing")
     p_update.add_argument("--restore", action="store_true", help="write generated files that were deleted")
+    p_serve = sub.add_parser("serve", help="serve the website, the documentation and the Composer on 127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8765,
+                         help="port (default 8765; the Composer workspace belongs to the port)")
+    p_serve.add_argument("--no-browser", action="store_true", help="do not open the browser")
     args = parser.parse_args(argv)
 
     if args.command == "info":
@@ -122,5 +126,9 @@ def main(argv: list[str] | None = None) -> int:
         from openspacehdl import project
 
         return project.main_update(args.dir, args.source, args.hdl, args.dry_run, args.restore)
+    if args.command == "serve":
+        from openspacehdl import serve
+
+        return serve.main(args.port, not args.no_browser)
     parser.print_help()
     return 0

@@ -25,8 +25,12 @@ def load(name):
 wheel_check = load("wheel_check")
 PROJECT = {"tool": {"openspacehdl": {"path-limit": 260, "install-prefix": 120, "pypi-file-limit-mb": 100}}}
 DIST = "openspacehdl-0.1.0.dist-info"
-TEXTS = ["PSI-HDL-1.0.txt", "LGPL-2.1.txt", "Apache-2.0.txt", "MIT-en_cl_fix.md"]
+TEXTS = list(json.loads((LICENSES / "licenses.json").read_text(encoding="utf-8")))
 SCHEMAS = {"system-1.json": b'{"$id": "1"}\n', "system-2.json": b'{"$id": "2"}\n'}
+EXPRESSION = "MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0 AND CC-BY-4.0 AND OFL-1.1 AND LicenseRef-OpenSpaceHDL-Logo"
+PORTAL = {"index.html": (b"<p>start</p>", "MIT AND CC-BY-4.0"),
+          "favicon.svg": (b"<svg/>", "LicenseRef-OpenSpaceHDL-Logo"),
+          "openwire/index.html": (b"<p>w</p>", "LicenseRef-PSI-HDL-1.0 AND CC-BY-4.0 AND Apache-2.0")}
 
 
 def sha(b: bytes) -> str:
@@ -41,10 +45,16 @@ def snapshot_files() -> dict[str, dict[str, bytes]]:
     }
 
 
-def make_wheel(path: Path, *, files=None, lock_files=None, expression="MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0",
-               license_files=None, extra=None, waived=None, with_lock=True, bundles=None, schemas=None,
-               lock_schemas=None) -> Path:
+def make_wheel(path: Path, *, files=None, lock_files=None, expression=EXPRESSION, license_files=None, extra=None,
+               waived=None, with_lock=True, bundles=None, schemas=None, lock_schemas=None, portal=None,
+               portal_files=None) -> Path:
+    """A wheel; a wheel with snapshots gets the portal PORTAL (path -> content, licence) unless portal is {} or
+    another one; portal_files overrides the files of the portal manifest (path -> content, licence)."""
     files = snapshot_files() if files is None else files
+    portal = (PORTAL if files else {}) if portal is None else portal
+    listed = portal if portal_files is None else portal_files
+    manifest = {"format": "openspacehdl-portal", "version": 1,
+                "files": {p: {"sha256": sha(b), "license": lic} for p, (b, lic) in listed.items()}}
     schemas = (SCHEMAS if with_lock else {}) if schemas is None else schemas
     lock = {"format": "openspacehdl-lock", "version": 1,
             "website": {"schemas": lock_schemas if lock_schemas is not None else
@@ -71,6 +81,10 @@ def make_wheel(path: Path, *, files=None, lock_files=None, expression="MIT AND L
                 z.writestr(f"openspacehdl/hdl/{d}/{p}", b)
         for n, b in schemas.items():
             z.writestr(f"openspacehdl/data/schema/{n}", b)
+        if listed:
+            z.writestr("openspacehdl/data/portal.json", json.dumps(manifest))
+        for p, (b, _) in portal.items():
+            z.writestr(f"openspacehdl/portal/{p}", b)
         z.writestr(f"{DIST}/METADATA", meta)
         for lf in license_files:
             src = ROOT / lf
@@ -133,8 +147,35 @@ def test_l6_a_manifest_without_schemas(tmp_path):
 
 
 def test_l7_an_expression_without_apache(tmp_path):
-    v = wheel_check.check(make_wheel(tmp_path / "w.whl", expression="MIT AND LicenseRef-PSI-HDL-1.0"), PROJECT)
-    assert len(v) == 1 and v[0].startswith("L7:") and "Apache-2.0" in v[0]
+    # UVVM of the snapshots and the icons of the documentation sites in the portal both need it
+    expression = EXPRESSION.replace(" AND Apache-2.0", "")
+    v = wheel_check.check(make_wheel(tmp_path / "w.whl", expression=expression), PROJECT)
+    assert len(v) == 2 and all(x.startswith("L7:") and "Apache-2.0" in x for x in v)
+    assert v[0] == "L7: the licence expression does not name Apache-2.0, a licence of the portal"
+
+
+def test_l6_a_wheel_with_snapshots_but_no_portal(tmp_path):
+    assert wheel_check.check(make_wheel(tmp_path / "w.whl", portal={}), PROJECT) == [
+        "L6: the wheel has snapshots but no portal (openspacehdl/data/portal.json)"]
+
+
+def test_l6_a_changed_a_missing_and_an_extra_portal_file(tmp_path):
+    portal = {**PORTAL, "index.html": (b"changed", "MIT AND CC-BY-4.0"), "extra.html": (b"x", "MIT")}
+    del portal["favicon.svg"]
+    v = wheel_check.check(make_wheel(tmp_path / "w.whl", portal=portal, portal_files=PORTAL), PROJECT)
+    assert v == ["L6: openspacehdl/portal/favicon.svg is missing",
+                 "L6: openspacehdl/portal/index.html: the hash differs from the portal manifest",
+                 "L6: openspacehdl/portal/extra.html is not in the portal manifest"]
+
+
+def test_l7_a_portal_licence_the_expression_does_not_name(tmp_path):
+    v = wheel_check.check(make_wheel(tmp_path / "w.whl", expression=EXPRESSION.replace(" AND OFL-1.1", "")),
+                          PROJECT)
+    assert v == []
+    portal = {**PORTAL, "assets/fonts/sora.woff2": (b"f", "OFL-1.1")}
+    v = wheel_check.check(make_wheel(tmp_path / "x.whl", expression=EXPRESSION.replace(" AND OFL-1.1", ""),
+                                     portal=portal), PROJECT)
+    assert v == ["L7: the licence expression does not name OFL-1.1, a licence of the portal"]
 
 
 def test_l7_a_licence_text_not_in_the_metadata(tmp_path):
@@ -167,7 +208,7 @@ def test_l9_the_size_limit(tmp_path):
 
 
 def test_main_reports_and_fails(tmp_path, capsys):
-    w = make_wheel(tmp_path / "w.whl", expression="MIT")
+    w = make_wheel(tmp_path / "w.whl", expression=EXPRESSION.replace(" AND CC-BY-4.0", ""))
     assert wheel_check.main([str(w)]) == 1
     out = capsys.readouterr().out
     assert "L7:" in out and "1 violation(s)" in out
