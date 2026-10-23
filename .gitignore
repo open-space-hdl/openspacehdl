@@ -10,3 +10,5 @@ build/
 dist/
 # Source snapshots, written by tools/snapshot.py from the lock manifest
 src/openspacehdl/hdl/
+# Git bundles, written by tools/snapshot.py from the lock manifest
+src/openspacehdl/bundles/

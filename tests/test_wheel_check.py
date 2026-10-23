@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import json
+import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -40,13 +41,18 @@ def snapshot_files() -> dict[str, dict[str, bytes]]:
 
 
 def make_wheel(path: Path, *, files=None, lock_files=None, expression="MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0",
-               license_files=None, extra=None, waived=None, with_lock=True) -> Path:
+               license_files=None, extra=None, waived=None, with_lock=True, bundles=None) -> Path:
     files = snapshot_files() if files is None else files
     lock = {"format": "openspacehdl-lock", "version": 1,
             "files": lock_files if lock_files is not None else
             {d: {p: sha(b) for p, b in e.items()} for d, e in files.items()}}
     if waived:
         lock["waived"] = waived
+    bundle_files = {}
+    for bid, (spec, data) in (bundles or {}).items():
+        lock.setdefault("bundles", {})[bid] = spec
+        if data is not None:
+            bundle_files[f"openspacehdl/bundles/{bid}.bundle"] = data
     license_files = license_files if license_files is not None else \
         ["LICENSE"] + [f"src/openspacehdl/licenses/{n}" for n in TEXTS]
     meta = "Metadata-Version: 2.4\nName: openspacehdl\nVersion: 0.1.0\n"
@@ -62,7 +68,7 @@ def make_wheel(path: Path, *, files=None, lock_files=None, expression="MIT AND L
         for lf in license_files:
             src = ROOT / lf
             z.writestr(f"{DIST}/licenses/{lf}", src.read_bytes() if src.exists() else b"")
-        for name, b in (extra or {}).items():
+        for name, b in {**bundle_files, **(extra or {})}.items():
             z.writestr(name, b)
     return path
 
@@ -144,3 +150,36 @@ def test_main_reports_and_fails(tmp_path, capsys):
 @pytest.mark.parametrize("n", [139])
 def test_the_budget_of_the_repository(n):
     assert wheel_check.snapshot.path_budget(wheel_check.snapshot.pyproject()) == n
+
+
+@pytest.fixture
+def bundle(tmp_path):
+    """A small bundle and its refs."""
+    if shutil.which("git") is None:
+        pytest.skip("needs git")
+    from gitrepo import git, make_repo
+
+    sha = make_repo(tmp_path / "r", {"a.vhd": "-- a\n"})
+    git(tmp_path / "r", "tag", "v0.1.0")
+    git(tmp_path / "r", "bundle", "create", "-q", str(tmp_path / "r.bundle"), "refs/heads/main", "refs/tags/v0.1.0")
+    return {"branch": "main", "commit": sha, "url": "u", "refs": {"refs/heads/main": sha, "refs/tags/v0.1.0": sha}}, \
+        (tmp_path / "r.bundle").read_bytes()
+
+
+def test_l6_a_good_bundle(tmp_path, bundle):
+    assert wheel_check.check(make_wheel(tmp_path / "w.whl", bundles={"openwire": bundle}), PROJECT) == []
+
+
+def test_l6_a_bundle_with_other_refs(tmp_path, bundle):
+    spec, data = bundle
+    other = {**spec, "refs": {**spec["refs"], "refs/tags/v0.2.0": spec["commit"]}}
+    v = wheel_check.check(make_wheel(tmp_path / "w.whl", bundles={"openwire": (other, data)}), PROJECT)
+    assert v == ["L6: openspacehdl/bundles/openwire.bundle: the refs differ from the manifest"]
+
+
+def test_l6_a_missing_and_an_extra_bundle(tmp_path, bundle):
+    spec, data = bundle
+    w = make_wheel(tmp_path / "w.whl", bundles={"openwire": (spec, None)},
+                   extra={"openspacehdl/bundles/other.bundle": data})
+    assert wheel_check.check(w, PROJECT) == ["L6: openspacehdl/bundles/openwire.bundle is missing",
+                                             "L6: openspacehdl/bundles/other.bundle is not in the manifest"]

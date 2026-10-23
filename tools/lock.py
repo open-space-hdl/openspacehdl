@@ -13,7 +13,8 @@ tag, and the tags of every repository, and applies the consistency rules of open
 also asks the remote of every repository (git ls-remote) which tags are published.
 
 The manifest also lists every file of the source snapshots with its SHA-256 (rule L6), selected as tools/snapshot.py
-selects them; UVVM is read from --uvvm, by default the uvvm submodule of the first core clone that has the commit.
+selects them, and the refs of the Git bundle of every repository (tools/bundles.py); UVVM is read from --uvvm, by
+default the uvvm submodule of the first core clone that has the commit.
 
 Default: write the manifest; nothing is written when a rule fails. --check: compare the committed manifest with the
 one the inputs give. --report: print the violations only. --waive <rule> accepts the violations of a rule and
@@ -42,6 +43,7 @@ from openspacehdl import __version__  # noqa: E402
 from openspacehdl.errors import LockError  # noqa: E402
 from openspacehdl.lock import OLO_ID, REFSYS_REPO, Inputs, build, check, dumps  # noqa: E402
 
+import bundles  # noqa: E402
 import snapshot  # noqa: E402
 
 OUT = ROOT / "src" / "openspacehdl" / "data" / "lock.json"
@@ -195,11 +197,12 @@ def main(argv: list[str] | None = None) -> int:
         manifest = build(inputs, __version__, waive=waive)
         sources = snapshot.trees(manifest, args.repos, args.uvvm, refsys=args.refsys)
         files = {d: snapshot.hashes(kind, tree, **kw) for d, (kind, tree, kw) in sources.items()}
-        text = dumps(build(inputs, __version__, files=files, waive=waive))
+        specs = bundles.specs(manifest, args.repos, refsys=args.refsys, offline=args.offline)
+        text = dumps(build(inputs, __version__, files=files, waive=waive, bundles=specs))
     except LockError as e:
         print(f"lock: {e}", file=sys.stderr)
         return 1
-    except snapshot.InputError as e:
+    except (snapshot.InputError, bundles.BundleError) as e:
         print(f"lock: {e}", file=sys.stderr)
         return 2
     if waive:

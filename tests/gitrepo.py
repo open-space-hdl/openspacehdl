@@ -32,9 +32,9 @@ def commit(path: Path, files: dict[str, str], links: dict[str, str] | None = Non
 
 
 def publish(path: Path) -> None:
-    """Pushes the branch and every tag that exists now to the remote origin, a bare repository next to the clone."""
+    """Pushes the current branch and every tag to the remote origin, a bare repository next to the clone."""
     bare = path.with_name(path.name + ".git")
     if not bare.exists():
         subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True, capture_output=True)
         git(path, "remote", "add", "origin", str(bare))
-    git(path, "push", "-q", "origin", "main", "--tags")
+    git(path, "push", "-q", "origin", git(path, "rev-parse", "--abbrev-ref", "HEAD"), "--tags")

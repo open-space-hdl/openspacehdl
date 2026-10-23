@@ -12,6 +12,8 @@ commit. The tool empties src/openspacehdl/hdl/ first, writes every file the mani
   src/openspacehdl/licenses/, or the licence expression or license-files of pyproject.toml miss one of them;
 - L8: a path in the wheel would be longer than the budget of [tool.openspacehdl] in pyproject.toml.
 
+It then writes the Git bundles of the manifest into src/openspacehdl/bundles/ (tools/bundles.py).
+
 The module also holds the selection of the files (select()), which tools/lock.py uses for the hashes of the manifest.
 Exit status 0 on success, 1 on a violation, 2 on an error of the inputs.
 """
@@ -40,6 +42,7 @@ PKG = ROOT / "src" / "openspacehdl"
 LICENSES = PKG / "licenses"
 LOCK = PKG / "data" / "lock.json"
 OUT = PKG / "hdl"
+BUNDLES_OUT = PKG / "bundles"
 WHEEL_PREFIX = "openspacehdl/hdl"
 
 # Snapshot directories (docs/design.md, section 4.1)
@@ -331,6 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-waived", action="store_true", help="accept a manifest that waives rules (tests)")
     parser.add_argument("--lock", type=Path, default=LOCK, help=argparse.SUPPRESS)
     parser.add_argument("--out", type=Path, default=OUT, help=argparse.SUPPRESS)
+    parser.add_argument("--bundles-out", type=Path, default=BUNDLES_OUT, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if not args.lock.exists():
         print(f"snapshot: no manifest {args.lock}", file=sys.stderr)
@@ -340,15 +344,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"snapshot: the manifest waives {', '.join(lock['waived'])}; it is for tests of the build only "
               f"(--allow-waived)", file=sys.stderr)
         return 1
+    sys.path.insert(0, str(ROOT / "tools"))
+    import bundles
+
     try:
         n = write(lock, args.repos, args.uvvm, args.out, args.refsys)
+        b = bundles.write(lock, args.repos, args.bundles_out, args.refsys)
     except SnapshotError as e:
         print(f"snapshot: {e}", file=sys.stderr)
         return 1
-    except InputError as e:
+    except (InputError, bundles.BundleError) as e:
         print(f"snapshot: {e}", file=sys.stderr)
         return 2
-    print(f"wrote {n} files to {args.out}")
+    print(f"wrote {n} files to {args.out} and {b} bundles to {args.bundles_out}")
     return 0
 
 

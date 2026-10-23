@@ -2,8 +2,9 @@
 
     python tools/wheel_check.py <wheel> [--allow-waived]
 
-- L6: every snapshot file of the manifest is in the wheel below openspacehdl/hdl/ with its SHA-256, and the wheel has
-  no other file there;
+- L6: every snapshot file of the manifest is in the wheel below openspacehdl/hdl/ with its SHA-256, every Git bundle
+  below openspacehdl/bundles/ with the refs of the manifest (git bundle list-heads), and the wheel has no other file
+  there;
 - L7: the licence expression of the wheel names every licence of the snapshots, and its License-File entries list
   every licence text of src/openspacehdl/licenses/, each copied to .dist-info/licenses/;
 - L8: the longest path in the wheel stays within the budget of [tool.openspacehdl] in pyproject.toml;
@@ -18,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import tempfile
 import zipfile
 from email.parser import HeaderParser
 from pathlib import Path
@@ -25,10 +27,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
 
+import bundles  # noqa: E402
 import snapshot  # noqa: E402
 
 LOCK_NAME = "openspacehdl/data/lock.json"
 HDL = "openspacehdl/hdl/"
+BUNDLES = "openspacehdl/bundles/"
 
 
 def metadata(z: zipfile.ZipFile) -> tuple[str, list[str], str]:
@@ -55,6 +59,22 @@ def check(wheel: Path, project: dict, allow_waived: bool = False) -> list[str]:
                 out.append(f"L6: {name}: the hash differs from the manifest")
         extra = sorted(n for n in names if n.startswith(HDL) and not n.endswith("/") and n not in expected)
         out += [f"L6: {n} is not in the manifest" for n in extra[:20]]
+        specs = (lock or {}).get("bundles", {})
+        wanted = {f"{BUNDLES}{b}.bundle": spec for b, spec in specs.items()}
+        with tempfile.TemporaryDirectory(prefix="osh-wheel-") as tmp:
+            for name, spec in sorted(wanted.items()):
+                if name not in names:
+                    out.append(f"L6: {name} is missing")
+                    continue
+                f = Path(tmp) / Path(name).name
+                f.write_bytes(z.read(name))
+                try:
+                    if bundles.list_heads(f) != spec["refs"]:
+                        out.append(f"L6: {name}: the refs differ from the manifest")
+                except bundles.BundleError as e:
+                    out.append(f"L6: {name}: {e}")
+        extra = sorted(n for n in names if n.startswith(BUNDLES) and not n.endswith("/") and n not in wanted)
+        out += [f"L6: {n} is not in the manifest" for n in extra]
 
         expression, license_files, dist_info = metadata(z)
         try:

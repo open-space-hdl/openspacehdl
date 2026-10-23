@@ -15,6 +15,9 @@ All notable changes of the package. Versions follow [semantic versioning](https:
 - `openspacehdl.add_core(vu, core)` and `openspacehdl.add_uvvm(vu)` for VUnit, with the errors `UnknownCoreError`,
   `OpenLogicConflictError` and `LibraryConflictError`; `openspacehdl lock` shows the lock manifest.
 
+- Git bundles of every repository of the lock manifest (the pinned commit with its history and published tags) and
+  `openspacehdl export <dir> [--git] [--core <core>]`: the sources as a plain tree, or as Git repositories with
+  their submodules, without network.
 - `openspacehdl.composer.load()`: reads a saved system of the Composer with its export and refuses it, with every
   reason, when it breaks the schema, has problems or error checks, an unknown layout, an export of another state,
   pins other than the lock manifest or an external interface the generated testbench does not support;

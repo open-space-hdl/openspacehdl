@@ -168,10 +168,11 @@ RULES = ("L1", "L2", "L3", "L4", "L5", "L10")
 
 
 def build(inputs: Inputs, package_version: str, files: dict[str, dict[str, str]] | None = None,
-          waive: tuple[str, ...] = ()) -> dict:
+          waive: tuple[str, ...] = (), bundles: dict[str, dict] | None = None) -> dict:
     """The manifest of these inputs; raises LockError with every violation when a rule fails.
 
-    files: the snapshot files per snapshot directory, path -> SHA-256 (rule L6). waive: rules whose violations are
+    files: the snapshot files per snapshot directory, path -> SHA-256 (rule L6). bundles: the Git bundles, bundle id ->
+    branch, commit, remote URL and refs (tools/bundles.py). waive: rules whose violations are
     accepted; the manifest records them, and only a test of the build reads such a manifest (Lock.from_dict).
     """
     unknown = sorted(set(waive) - set(RULES))
@@ -229,6 +230,7 @@ def build(inputs: Inputs, package_version: str, files: dict[str, dict[str, str]]
             for s in cores
         ],
         **({"files": {d: dict(sorted(e.items())) for d, e in sorted(files.items())}} if files else {}),
+        **({"bundles": dict(sorted(bundles.items()))} if bundles else {}),
         **({"waived": sorted(set(waive))} if waive else {}),
     }
 
@@ -266,11 +268,17 @@ class Lock:
     olo_commit: str
     olo_library: str
     olo_file_list: str
+    olo_repository: str
+    refsys_repository: str
     uvvm_commit: str
     cores: tuple[Core, ...]
     # snapshot directory -> path -> SHA-256
     files: dict[str, dict[str, str]] = field(default_factory=dict)
+    # bundle id -> branch, commit, url, refs
+    bundles: dict[str, dict] = field(default_factory=dict)
     waived: tuple[str, ...] = ()
+    # Open Logic FT submodules: path -> commit
+    olo_submodules: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
     def from_dict(d: dict, allow_waived: bool = False) -> Lock:
@@ -291,6 +299,8 @@ class Lock:
             olo_commit=d["openLogic"]["commit"],
             olo_library=d["openLogic"]["library"],
             olo_file_list=d["openLogic"]["fileList"],
+            olo_repository=d["openLogic"].get("repository", "open-space-hdl/open-logic-ft"),
+            refsys_repository=d["referenceSystems"].get("repository", "open-space-hdl/reference-systems"),
             uvvm_commit=d["uvvm"]["commit"],
             cores=tuple(
                 Core(
@@ -302,7 +312,9 @@ class Lock:
                 for c in d["cores"]
             ),
             files={k: dict(v) for k, v in d.get("files", {}).items()},
+            bundles={k: dict(v) for k, v in d.get("bundles", {}).items()},
             waived=tuple(d.get("waived", ())),
+            olo_submodules=dict(d["openLogic"].get("submodules", {})),
         )
 
 
