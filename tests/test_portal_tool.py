@@ -181,9 +181,13 @@ def test_foreign_requests(tmp_path):
 
 
 def test_broken_links(tree):
+    # a directory without index.html is no page either
     write(tree, {"page.html": '<a href="/trl/">t</a><a href="/nothing/">n</a><a href="/openwire/docs/x.html">x</a>'
-                              '<a href="https://openspacehdl.org/nothing/">o</a><a href="rel.html">r</a>'})
-    assert portal.broken_links(tree) == ["page.html: /nothing/", "page.html: /openwire/docs/x.html"]
+                              '<a href="https://openspacehdl.org/nothing/">o</a><a href="rel.html">r</a>'
+                              '<a href="/openwire/empty/">e</a>',
+                 "openwire/empty/notes.txt": "n"})
+    assert portal.broken_links(tree) == ["page.html: /nothing/", "page.html: /openwire/docs/x.html",
+                                         "page.html: /openwire/empty/"]
 
 
 def test_documentation_links_of_the_catalog(tree):
@@ -300,6 +304,18 @@ def test_the_logo_notice_names_every_reserved_file():
             assert pattern in notice
 
 
+def test_every_file_of_the_logo_notice_gets_the_logo_licence():
+    # the other direction: an entry of the map that is lost or comes too late gives a logo file an open licence
+    notice = text("OpenSpaceHDL-Logo.txt").decode("utf-8")
+    website, docs = notice.split("- the website:")[1].split("- every documentation site:")
+    lmap = portal.licence_map()
+    for kind, part in (("website", website), ("docs", docs)):
+        names = re.findall(r"[\w./-]+\.(?:svg|png|ico)", part)
+        assert len(names) == {"website": 5, "docs": 2}[kind]
+        for name in names:
+            assert portal.licence_of(name, lmap[kind], PSI) == "LicenseRef-OpenSpaceHDL-Logo", (kind, name)
+
+
 # build() with fixture sites instead of Jekyll and MkDocs
 
 def fixture_world(tmp_path, monkeypatch, website_extra=None, docs_extra=None):
@@ -358,6 +374,8 @@ def test_build_writes_the_portal_and_its_manifest(tmp_path, monkeypatch):
     ({"x.html": '<script src="https://cdn.example/a.js"></script>'}, None, "L11: x.html: script https://cdn.example"),
     ({"openwire/old.html": "x"}, None, "L11: the website has a path openwire/"),
     (None, {"page.html": '<a href="/openwire/missing.html">m</a>'}, "L11: openwire/page.html: /openwire/missing.html"),
+    ({"assets/composer/catalog.json": json.dumps({"blocks": [{"id": "a", "doc": "/openwire/missing.html"}]})}, None,
+     "L11: assets/composer/catalog.json: the documentation link /openwire/missing.html is a path the portal does not"),
     (None, {"assets/external/x.js": ""}, "L7: openwire/assets/external/x.js has no licence"),
     ({"LICENSE": b"changed"}, None, "LICENSE differs from src/openspacehdl/licenses/MIT-website.txt"),
     (None, {"assets/fonts/Sora-OFL.txt": b"other"}, "Sora-OFL.txt differs from src/openspacehdl/licenses/OFL-1.1"),
