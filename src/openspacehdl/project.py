@@ -83,6 +83,76 @@ def _smoke_text(plan: bench.Plan) -> str:
     return "`test_smoke` resets the system and then\n\n" + "\n".join(wrapped)
 
 
+def _test_items(plan: bench.Plan, image: bool) -> list[str]:
+    """The list items of the README on what test_streams (image False) or test_image_stream does."""
+
+    def link(far: int, vc: int) -> str:
+        ep = plan.far_ends[far]
+        return f"`{ep}`" + (f" (virtual channel {vc})" if ep.endswith(".Gt") else "")
+
+    sends, receives, chains, keys, counters = generate.stream_parts(plan, image)
+    items = []
+    for k in keys:
+        items.append(f"- loads the test key of `{k.ocr}` into slot 0 with generated IVs: "
+                     f"{generate.TEST_KEYS[k.key_bits][1]}, the fixed field 0x{generate.TEST_IV_FIXED:08X} and the "
+                     f"first invocation counter 0x{generate.TEST_IV_COUNT:016X} (GCM specification, test case 3); "
+                     f"test values, not for use in a mission;")
+    for st in sends:
+        items.append(f"- sends SDUs of {' and '.join(str(n) for n in st.lengths)} bytes at `{st.endpoint}` "
+                     f"(APID 0x{st.apid:03X}) and checks every Space Packet with its CPTP header byte for byte at the "
+                     f"far end of {link(st.far, st.vc)};")
+    for r in receives:
+        items.append(f"- sends Space Packets with SDUs of {' and '.join(str(n) for n in r.lengths)} bytes (APID "
+                     f"0x{r.apid:03X}, CPTP User Application value 0x{r.ua:02X}) from the far end of "
+                     f"{link(r.far, r.vc)} and checks the SDUs and their user fields at `{r.endpoint}`;")
+    for _, c in chains:
+        what = (f"one message of {c.message_bytes} bytes" if c.kind == "bytes"
+                else f"one image of {c.samples} samples")
+        items.append(f"- sends {what} at `{c.endpoint}` through `{c.ocr}` and checks its chunks at the far end of "
+                     f"{link(c.far, c.vc)}: the CPTP header, the Packet Primary Header (APID 0x{c.apid:03X}), the IV "
+                     f"(fixed field, invocation counter + chunk), the position and the length of every chunk"
+                     + (f", {-(-c.message_bytes // c.chunk_bytes)} chunks;" if c.kind == "bytes"
+                        else ", up to the last chunk of the image;"))
+    if chains:
+        items.append("- checks the framing of the encrypted chunks, not their ciphertext and tag;")
+    if counters:
+        names = [f"`{c.instance}`" for c in counters]
+        listed = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+        items.append(f"- reads the counters of {listed}: the packets of the test, no error;")
+    return [textwrap.fill(i, width=120, subsequent_indent="  ", break_on_hyphens=False) for i in items]
+
+
+def _stream_text(plan: bench.Plan) -> str:
+    """The section of the README on what test_streams and test_image_stream do for this system."""
+    end = "- fails on every unexpected alert of the testbench."
+    items = _test_items(plan, image=False)
+    if items:
+        text = ("`test_streams` resets the system, brings its links up as `test_smoke` does and then\n\n"
+                + "\n".join(items + [end]))
+    else:
+        text = "The system has no stream that `test_streams` serves; the test only logs this."
+    image = _test_items(plan, image=True)
+    if image:
+        text += ("\n\n`test_image_stream` resets the system, brings its links up and then\n\n"
+                 + "\n".join(image + [end])
+                 + "\n\n" + textwrap.fill("The image takes hours to simulate in GHDL, because the link carries every "
+                                          "chunk of it. Leave the test out of a regular run:", width=120)
+                 + '\n\n```shell\npython sim/run.py -p 2 "*test_smoke" "*test_streams"\n```')
+    if plan.stream_notes:
+        last = len(plan.stream_notes) - 1
+        notes = [textwrap.fill(f"- {n}{'.' if i == last else ';'}", width=120, subsequent_indent="  ",
+                               break_on_hyphens=False) for i, n in enumerate(plan.stream_notes)]
+        text += "\n\nStreams and counters the tests leave out:\n\n" + "\n".join(notes)
+    return text
+
+
+IMAGE_TEST = """
+            elsif run("test_image_stream") then
+                -- Reset, link start and link up, one image through every processing chain from a compressor
+                -- towards a link, the counters of their cores (osh_image_test); hours in GHDL, see the README
+                osh_image_test(osh_rst, AXILITE_VVCT, AXISTREAM_VVCT, osh_link_up);"""
+
+
 def files_of(system: composer.System, lock) -> tuple[dict[str, str], dict[str, str]]:
     """(generated, seeds): project path -> text, for a checked system; raises bench.BenchError."""
     e, source, line = system.entity, system.path.name, _lock_line(lock)
@@ -94,11 +164,12 @@ def files_of(system: composer.System, lock) -> tuple[dict[str, str], dict[str, s
     }
     seeds = {
         "README.md": _template("README.md.tmpl", header=_md_header(source, line), entity=e, source=source,
-                               version=__version__, smoke=_smoke_text(plan)),
+                               version=__version__, smoke=_smoke_text(plan), streams=_stream_text(plan)),
         "sim/run.py": _template("run.py.tmpl", header=generate.header("#", source, line, generated=False).rstrip(),
                                 entity=e),
         f"sim/tb/{e}_tb.vhd": _template("tb.vhd.tmpl", header=generate.header("--", source, line,
-                                                                                generated=False).rstrip(), entity=e),
+                                                                                generated=False).rstrip(), entity=e,
+                                        image_test=IMAGE_TEST if generate.stream_parts(plan, True)[2] else ""),
     }
     return generated, seeds
 

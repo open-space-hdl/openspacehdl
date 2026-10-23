@@ -14,6 +14,9 @@ library uvvm_vvc_framework;
 library bitvis_vip_axilite;
     use bitvis_vip_axilite.vvc_methods_pkg.all;
 
+library bitvis_vip_axistream;
+    use bitvis_vip_axistream.vvc_methods_pkg.AXISTREAM_VVCT;
+
 library osh_tb;
     use osh_tb.osh_tb_pkg.all;
 
@@ -44,6 +47,10 @@ begin
                 -- Reset, link start and link up, the ID register of every register bank, the memory of the RMAP
                 -- targets behind a link (osh_smoke_test of the harness package)
                 osh_smoke_test(osh_rst, AXILITE_VVCT, osh_rmap_cmd, osh_rmap_res, osh_link_up);
+            elsif run("test_streams") then
+                -- Reset, link start and link up, packets through the ports of OpenSPP and the far ends, every
+                -- processing chain towards a link, the counters of their cores (osh_stream_test)
+                osh_stream_test(osh_rst, AXILITE_VVCT, AXISTREAM_VVCT, osh_link_up);$image_test
             end if;
         end loop;
         -- Fails on an unexpected alert and on an expected alert that did not occur

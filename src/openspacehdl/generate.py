@@ -3,7 +3,8 @@
 The harness instantiates the system with a clock per clock domain (the period derived from the frequency of the
 Composer file), the reset from the testbench and, for every external interface, the bench component of osh_tb that
 the plan of openspacehdl.bench names: UVVM VVCs, the AXI4 memory responder and the far ends of the links. Inputs that
-no component drives are held idle. The package holds the constants, the signals of the far ends and the smoke test.
+no component drives are held idle. The package holds the constants, the signals of the far ends, the smoke test, the
+stream test and the image test.
 """
 
 from __future__ import annotations
@@ -66,8 +67,8 @@ def _hex40(value: int) -> str:
     return f'x"{value:010X}"'
 
 
-def _smoke_steps(plan: _bench.Plan) -> list[str]:
-    """The statements of osh_smoke_test after the reset."""
+def _bring_up_steps(plan: _bench.Plan) -> list[str]:
+    """The statements of osh_bring_up after the reset: the link starts and every link up."""
     out: list[str] = []
     if plan.starts:
         out += ["",
@@ -82,9 +83,15 @@ def _smoke_steps(plan: _bench.Plan) -> list[str]:
         out += ["", "        -- Every far end reports its link up"]
         out += [f'        osh_await_link_up(up({k}), C_OSH_LINK_TIMEOUT, "{ep}");'
                 for k, ep in enumerate(plan.far_ends)]
+    return out
+
+
+def _check_steps(plan: _bench.Plan) -> list[str]:
+    """The statements of osh_smoke_test after the bring-up."""
+    out: list[str] = []
     if plan.checks:
-        out += ["",
-                "        -- The ID register of every register bank; a bank without one: its base answers OKAY (status 0)"]
+        out += ["", "        -- The ID register of every register bank; a bank without one: its base answers OKAY "
+                    "(status 0)"]
     for c in plan.checks:
         if c.via == "axilite":
             addr = f"to_unsigned(16#{c.addr:X}#, {c.addr_width})"
@@ -110,10 +117,168 @@ def _smoke_steps(plan: _bench.Plan) -> list[str]:
         out += [f"        osh_rmap_memory_check(cmd({m.far}), res({m.far}), {m.tla}, {m.key}, {_hex40(m.addr)}, "
                 f"{m.mem}, {_bench.MEM_FILL_SEED}, {_bench.MEM_DATA_SEED},",
                 f'                              "{m.space}");']
-    vvcs = sorted({c.index for c in plan.checks if c.via == "axilite"} | {s.vvc for s in plan.starts})
+    vvcs = sorted({c.index for c in plan.checks if c.via == "axilite"})
     if vvcs:
         out += ["", "        -- The queued AXI4-Lite commands are complete"]
         out += [f'        await_completion(axilite, {n}, 1 ms, "AXI4-Lite VVC {n}");' for n in vvcs]
+    return out
+
+
+# Test keys of the stream checks, not for use in a mission: published test vectors, one per key size
+TEST_KEYS = {
+    128: ("feffe9928665731c6d6a8f9467308308", "the AES-128 key of the GCM specification (McGrew, Viega), test case 3"),
+    192: ("8e73b0f7da0e6452c810f32b809079e562f8ead2522c6b7b", "the AES-192 key of NIST SP 800-38A, example F.1.3"),
+    256: ("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4",
+          "the AES-256 key of NIST SP 800-38A, example F.1.5"),
+}
+TEST_IV_FIXED = 0xCAFEBABE
+TEST_IV_COUNT = 0xFACEDBADDECAF888
+# OpenCrypto registers (sw/ocr_regs.h of OpenCrypto v0.1.0): STATUS, KEY(n), IV_FIXED, IV_COUNT_LO/HI, KEY_LOAD
+OCR_STATUS, OCR_KEY0, OCR_IV_FIXED, OCR_IV_COUNT_LO, OCR_IV_COUNT_HI, OCR_KEY_LOAD = 0x014, 0x040, 0x060, 0x064, \
+    0x068, 0x06C
+OCR_KEY_LOAD_START_IV_GEN = 0x80000100  # START (bit 31), IV_GEN (bit 8), slot 0
+STREAM_SEED = 21  # seeds of the stream data (osh_mem_byte)
+SAMPLES_PER_COMMAND = 8192  # samples per command of the AXI4-Stream VVC (at most 16 KiB per command)
+
+
+def _beats(nbytes: int, data_width: int) -> int:
+    return max(1, -(-nbytes // max(1, data_width // 8)))
+
+
+def stream_parts(plan: _bench.Plan, image: bool):
+    """The streams of the stream test (image False) or the image test: sends, receives, chains (with their index in
+    plan.chains), key loads and the counters of the cores on their paths."""
+    chains = [(i, c) for i, c in enumerate(plan.chains) if (c.kind == "samples") == image]
+    sends, receives = ([], []) if image else (plan.sends, plan.receives)
+    ocrs = {c.ocr for _, c in chains}
+    cores = {s.spp for s in sends} | {r.spp for r in receives} | {c.spp for _, c in chains} | ocrs
+    keys = [k for k in plan.key_loads if k.ocr in ocrs]
+    counters = [c for c in plan.counters if c.instance in cores]
+    return sends, receives, chains, keys, counters
+
+
+def _stream_steps(plan: _bench.Plan, image: bool = False) -> list[str]:
+    """The statements of osh_stream_test (image False) or osh_image_test after the bring-up."""
+    sends, receives, chains, keys, counters = stream_parts(plan, image)
+    out: list[str] = []
+    if plan.spp_clocks:
+        out += ["", "        -- The APID tables of OpenSPP are ready 2048 cycles after the reset"]
+        out += [f"        wait for 2100 * C_{_ident(c)}_PERIOD;" for c in plan.spp_clocks]
+    for k in keys:
+        mib = f"axilite, {k.vvc}"
+        aw = next(c.addr_width for c in plan.counters if c.instance == k.ocr)
+        out += ["", f"        -- Test key in slot 0 of {k.ocr} with generated IVs (programming sequence of OpenCrypto, "
+                    f"step 3)"]
+        for n in range(k.key_bits // 32):
+            hi = k.key_bits - 1 - 32 * n
+            out += [f'        axilite_write({mib}, to_unsigned(16#{OCR_KEY0 + 4 * n:X}#, {aw}), '
+                    f'C_OSH_TEST_KEY_{k.key_bits}({hi} downto {hi - 31}), "{k.ocr}: KEY{n}");']
+        out += [f'        axilite_write({mib}, to_unsigned(16#{OCR_IV_FIXED:X}#, {aw}), C_OSH_TEST_IV_FIXED, '
+                f'"{k.ocr}: IV_FIXED");',
+                f'        axilite_write({mib}, to_unsigned(16#{OCR_IV_COUNT_LO:X}#, {aw}), '
+                f'C_OSH_TEST_IV_COUNT(31 downto 0), "{k.ocr}: IV_COUNT_LO");',
+                f'        axilite_write({mib}, to_unsigned(16#{OCR_IV_COUNT_HI:X}#, {aw}), '
+                f'C_OSH_TEST_IV_COUNT(63 downto 32), "{k.ocr}: IV_COUNT_HI");',
+                f'        axilite_write({mib}, to_unsigned(16#{OCR_KEY_LOAD:X}#, {aw}), '
+                f'x"{OCR_KEY_LOAD_START_IV_GEN:08X}",',
+                f'                      "{k.ocr}: KEY_LOAD slot 0, generated IVs");',
+                f'        await_completion({mib}, 100 us, "{k.ocr}: key load");',
+                "        wait for 10 us;",
+                f'        axilite_check({mib}, to_unsigned(16#{OCR_STATUS:X}#, {aw}), x"00000000", '
+                f'"{k.ocr}: STATUS, load done");',
+                f'        await_completion({mib}, 100 us, "{k.ocr}: STATUS");']
+    used = sorted({s.axis for s in sends} | {r.axis for r in receives} | {c.axis for _, c in chains})
+    axis_clk = {int(c.label.removeprefix("i_axis_")): dict(c.ports)["Clk"] for c in plan.components
+                if c.label.startswith("i_axis_")}
+    if used:
+        out += ["", "        -- The links pace the streams: the AXI4-Stream VVCs wait for a handshake as long as a",
+                "        -- chunk of a chain may take, await_completion bounds every packet. Their log of every",
+                "        -- byte is off."]
+    for a in used:
+        out += [f"        shared_axistream_vvc_config({a}).bfm_config.max_wait_cycles :=",
+                f"            C_OSH_CHAIN_TIMEOUT / C_{_ident(axis_clk[a])}_PERIOD;",
+                f"        disable_log_msg(axistream, {a}, ID_PACKET_DATA);",
+                f"        disable_log_msg(axistream, {a}, ID_PACKET_PAYLOAD);"]
+    seed = STREAM_SEED
+    for st in sends:
+        out += ["", f"        -- {st.endpoint}: SDUs of APID 0x{st.apid:03X}, byte for byte at far end {st.far} "
+                    f"(CPTP header FE 02 00 00, Space Packet)"]
+        for j, n in enumerate(st.lengths):
+            data = f"osh_mem_bytes(to_unsigned(0, 64), {n}, {seed})"
+            out += [f"        axistream_transmit(axistream, {st.axis}, osh_slv_bytes({data}),",
+                    f"                           osh_axis_user({_beats(n, st.data_width)}, "
+                    f"std_logic_vector(to_unsigned(16#{st.apid:X}#, {st.user_width}))),",
+                    f'                           "{st.endpoint}: SDU {j + 1} of {n} bytes");',
+                    f'        osh_link_check({st.far}, {st.vc}, osh_cptp_header(x"FE", x"00") & '
+                    f'osh_space_packet(16#{st.apid:X}#, false, false, {j},',
+                    f"                                                            {data}),",
+                    f'                       C_OSH_STREAM_TIMEOUT, "{st.endpoint}: packet {j + 1}");']
+            seed += 1
+    for r in receives:
+        user = r.apid + r.ua * 2 ** 14
+        out += ["", f"        -- {r.endpoint}: Space Packets of APID 0x{r.apid:03X} from far end {r.far} (CPTP User "
+                    f"Application value 0x{r.ua:02X}),",
+                "        -- delivered with their user fields"]
+        for j, n in enumerate(r.lengths):
+            data = f"osh_mem_bytes(to_unsigned(0, 64), {n}, {seed})"
+            out += [f"        axistream_expect(axistream, {r.axis}, osh_slv_bytes({data}),",
+                    f"                         osh_axis_user({_beats(n, r.data_width)}, "
+                    f"std_logic_vector(to_unsigned(16#{user:X}#, {r.user_width}))),",
+                    f'                         "{r.endpoint}: SDU {j + 1} of {n} bytes");',
+                    f'        osh_link_send({r.far}, {r.vc}, osh_cptp_header({r.tla}, x"{r.ua:02X}") & '
+                    f'osh_space_packet(16#{r.apid:X}#, false, false, {j},',
+                    f"                                                                       {data}),",
+                    f'                      "{r.endpoint}: packet {j + 1}");',
+                    f"        await_completion(axistream, {r.axis}, C_OSH_STREAM_TIMEOUT, "
+                    f'"{r.endpoint}: SDU {j + 1}");']
+            seed += 1
+    for k, (i, c) in enumerate(chains):
+        seed = STREAM_SEED + 100 + i
+        out += [""]
+        if c.kind == "bytes":
+            out += [f"        -- {c.endpoint}: one message of {c.message_bytes} bytes through {c.ocr}: "
+                    f"{-(-c.message_bytes // c.chunk_bytes)} chunks of APID 0x{c.apid:03X}",
+                    f"        axistream_transmit(axistream, {c.axis}, osh_slv_bytes(osh_mem_bytes(to_unsigned(0, 64), "
+                    f"{c.message_bytes}, {seed})),",
+                    f'                           "{c.endpoint}: message of {c.message_bytes} bytes");']
+            # One chunk more than the message has: the check ends at the chunk marked last, not at the limit
+            total, most = c.message_bytes, -(-c.message_bytes // c.chunk_bytes) + 1
+        else:
+            commands = -(-c.samples // SAMPLES_PER_COMMAND)
+            out += [f"        -- {c.endpoint}: one image of {c.samples} samples through {c.ocr}: chunks of "
+                    f"APID 0x{c.apid:03X}",
+                    f"        for I in 0 to {commands - 1} loop",
+                    f"            axistream_transmit(axistream, {c.axis}, osh_samples(I * {SAMPLES_PER_COMMAND}, "
+                    f"{SAMPLES_PER_COMMAND}, {c.data_width}, {seed}),",
+                    f'                               "{c.endpoint}: samples " & integer\'image(I * '
+                    f'{SAMPLES_PER_COMMAND}) & " on");',
+                    "        end loop;"]
+            total, most = 0, 2 * c.samples * max(1, -(-c.data_width // 8)) // c.chunk_bytes + 2
+        out += [f'        osh_link_check_chunks({c.far}, {c.vc}, x"FE", x"00", 16#{c.apid:X}#, 0, C_OSH_TEST_IV_FIXED, '
+                f"C_OSH_TEST_IV_COUNT,",
+                f"                              {c.chunk_bytes}, {total}, {most}, C_OSH_CHAIN_TIMEOUT, v_chunks({k}),",
+                f'                              "{c.endpoint}");']
+    if counters:
+        out += ["", "        -- The counters of the cores on the paths: the packets of this test, no error"]
+    for cnt in counters:
+        for addr, name, value in cnt.reads:
+            if name in ("TX_PACKETS", "RX_PACKETS", "ENCRYPTIONS"):
+                base = {"TX_PACKETS": sum(len(s.lengths) for s in sends if s.spp == cnt.instance),
+                        "RX_PACKETS": sum(len(r.lengths) for r in receives if r.spp == cnt.instance),
+                        "ENCRYPTIONS": 0}[name]
+                own = [f"v_chunks({k})" for k, (_, c) in enumerate(chains)
+                       if name != "RX_PACKETS" and cnt.instance == (c.ocr if name == "ENCRYPTIONS" else c.spp)]
+                expr = " + ".join(([str(base)] if base or not own else []) + own)
+                val = f"std_logic_vector(to_unsigned({expr}, 32))" if own else f'x"{base:08X}"'
+            else:
+                val = f'x"{value:08X}"'
+            out += [f"        axilite_check(axilite, {cnt.vvc}, to_unsigned(16#{addr:X}#, {cnt.addr_width}), {val},",
+                    f'                      "{cnt.instance}: {name}");']
+    vvcs = sorted({c.vvc for c in counters} | {k.vvc for k in keys})
+    for n in vvcs:
+        out += [f'        await_completion(axilite, {n}, 1 ms, "AXI4-Lite VVC {n}");']
+    for a in sorted({s.axis for s in sends} | {c.axis for _, c in chains}):
+        out += [f'        await_completion(axistream, {a}, C_OSH_STREAM_TIMEOUT, "AXI4-Stream VVC {a}");']
     return out
 
 
@@ -121,16 +286,20 @@ def harness_package(system: System, head: str, plan: _bench.Plan | None = None) 
     plan = _bench.plan(system) if plan is None else plan
     e = system.entity
     n = len(plan.far_ends)
+    keys = sorted({k.key_bits for k in plan.key_loads})
     lines = [head, "library ieee;", "    use ieee.std_logic_1164.all;", "    use ieee.numeric_std.all;", "",
              "library uvvm_util;", "    context uvvm_util.uvvm_util_context;", "",
              "library uvvm_vvc_framework;", "    use uvvm_vvc_framework.ti_vvc_framework_support_pkg.all;", "",
              "library bitvis_vip_axilite;", "    context bitvis_vip_axilite.vvc_context;",
              "    use bitvis_vip_axilite.td_target_support_pkg.all;", "",
-             "library osh_tb;", "    use osh_tb.osh_tb_pkg.all;", "    use osh_tb.osh_tb_check_pkg.all;", "",
+             "library bitvis_vip_axistream;", "    use bitvis_vip_axistream.vvc_methods_pkg.all;",
+             "    use bitvis_vip_axistream.td_vvc_framework_common_methods_pkg.all;", "",
+             "library osh_tb;", "    use osh_tb.osh_tb_pkg.all;", "    use osh_tb.osh_tb_check_pkg.all;",
+             "    use osh_tb.osh_tb_stream_pkg.all;", "",
              "-- Constants of the system",
              f"--   {e}",
              "-- for its testbench (the clocks of its clock domains, the reset, the far ends of its links), the",
-             "-- signals between the testbench and the harness, and the smoke test.",
+             "-- signals between the testbench and the harness, the smoke test, the stream test and the image test.",
              f"package {e}_th_pkg is", ""]
     cks = [(p.name, f"clock domain {name}", hz) for p, name, hz in clocks(system)]
     cks += [(c.port, c.name, c.hz) for c in plan.clocks]
@@ -150,7 +319,20 @@ def harness_package(system: System, head: str, plan: _bench.Plan | None = None) 
               "    constant C_OSH_LINK_TIMEOUT : time    := 5 ms;", ""]
     lines += [f"    --   far end {k}: {ep}" for k, ep in enumerate(plan.far_ends)]
     lines += ["" if plan.far_ends else None,
-              "    -- Reset of the system, driven by the testbench with osh_reset",
+              "    -- Time a packet of the stream test may take, and a chunk of a processing chain",
+              "    constant C_OSH_STREAM_TIMEOUT : time := 1 ms;",
+              "    constant C_OSH_CHAIN_TIMEOUT  : time := 20 ms;", ""]
+    for bits in keys:
+        lines += [f"    -- Test key, not for use in a mission: {TEST_KEYS[bits][1]}",
+                  f"    constant C_OSH_TEST_KEY_{bits} : std_logic_vector({bits - 1} downto 0) :=",
+                  "        " + " & ".join(f'x"{TEST_KEYS[bits][0][i:i + 32].upper()}"'
+                                        for i in range(0, bits // 4, 32)) + ";"]
+    if keys:
+        lines += ["    -- IV of the test key slot (GCM specification, test case 3): fixed field and first invocation "
+                  "counter",
+                  f'    constant C_OSH_TEST_IV_FIXED : std_logic_vector(31 downto 0) := x"{TEST_IV_FIXED:08X}";',
+                  f'    constant C_OSH_TEST_IV_COUNT : std_logic_vector(63 downto 0) := x"{TEST_IV_COUNT:016X}";', ""]
+    lines += ["    -- Reset of the system, driven by the testbench with osh_reset",
               "    signal osh_rst : std_logic := '1';", "",
               "    -- RMAP commands to the far ends (driven by the testbench), their results and link states (driven",
               "    -- by the far ends in the harness)",
@@ -159,14 +341,26 @@ def harness_package(system: System, head: str, plan: _bench.Plan | None = None) 
               "    signal osh_rmap_res : t_osh_rmap_res_array(0 to C_OSH_FAR_ENDS - 1);",
               "    signal osh_link_up  : std_logic_vector(0 to C_OSH_FAR_ENDS - 1);", "",
               "    procedure osh_reset(signal rst : out std_logic);", "",
-              "    -- Smoke test of the system: reset, the start of the links that do not start by themselves, every",
-              "    -- link up, the ID register of every register bank, the memory of every RMAP target behind a link",
+              "    -- Reset, the start of the links that do not start by themselves, every link up",
+              "    procedure osh_bring_up(",
+              "        signal rst     : out   std_logic;",
+              "        signal axilite : inout t_vvc_target_record;",
+              "        signal up      : in    std_logic_vector);", "",
+              "    -- Smoke test of the system: the bring-up, the ID register of every register bank, the memory of",
+              "    -- every RMAP target behind a link",
               "    procedure osh_smoke_test(",
               "        signal rst     : out   std_logic;",
               "        signal axilite : inout t_vvc_target_record;",
               "        signal cmd     : inout t_osh_rmap_cmd_array;",
               "        signal res     : in    t_osh_rmap_res_array;",
               "        signal up      : in    std_logic_vector);", "",
+              "    -- Stream test of the system: the bring-up, packets through every port of OpenSPP and its link",
+              "    -- (exact), every processing chain from a byte stream towards a link (its framing), the counters",
+              "    -- of their cores",
+              *_test_head("osh_stream_test", ";"), "",
+              "    -- Image test of the system: the bring-up, one image through every processing chain from a",
+              "    -- compressor towards a link (its framing), the counters of their cores",
+              *_test_head("osh_image_test", ";"), "",
               f"end package {e}_th_pkg;", "",
               f"package body {e}_th_pkg is", "",
               "    procedure osh_reset(signal rst : out std_logic) is",
@@ -174,6 +368,14 @@ def harness_package(system: System, head: str, plan: _bench.Plan | None = None) 
               "        rst <= '1';",
               "        wait for C_RESET_CYCLES * C_SLOWEST_PERIOD;",
               "        rst <= '0';",
+              "    end procedure;", "",
+              "    procedure osh_bring_up(",
+              "        signal rst     : out   std_logic;",
+              "        signal axilite : inout t_vvc_target_record;",
+              "        signal up      : in    std_logic_vector) is",
+              "    begin",
+              "        osh_reset(rst);",
+              *_bring_up_steps(plan),
               "    end procedure;", "",
               "    procedure osh_smoke_test(",
               "        signal rst     : out   std_logic;",
@@ -184,11 +386,38 @@ def harness_package(system: System, head: str, plan: _bench.Plan | None = None) 
               "        variable v_data : t_osh_byte_array(0 to 3);",
               "    begin",
               f'        log(ID_LOG_HDR, "Smoke test of {e}", "osh_smoke_test");',
-              "        osh_reset(rst);",
-              *_smoke_steps(plan),
+              "        osh_bring_up(rst, axilite, up);",
+              *_check_steps(plan),
               "    end procedure;", "",
+              *_test_body(plan, e, image=False), "",
+              *_test_body(plan, e, image=True), "",
               f"end package body {e}_th_pkg;", ""]
     return "\n".join(line for line in lines if line is not None)
+
+
+def _test_head(name: str, end: str) -> list[str]:
+    return [f"    procedure {name}(",
+            "        signal rst       : out   std_logic;",
+            "        signal axilite   : inout t_vvc_target_record;",
+            "        signal axistream : inout bitvis_vip_axistream.td_target_support_pkg.t_vvc_target_record;",
+            f"        signal up        : in    std_logic_vector){end}"]
+
+
+def _test_body(plan: _bench.Plan, e: str, image: bool) -> list[str]:
+    """The body of osh_stream_test or osh_image_test."""
+    name, what = ("osh_image_test", "Image test") if image else ("osh_stream_test", "Stream test")
+    sends, receives, chains, _, _ = stream_parts(plan, image)
+    lines = [*_test_head(name, " is"),
+             f"        variable v_chunks : integer_vector(0 to {max(len(chains), 1) - 1}) := (others => 0);",
+             "    begin"]
+    if sends or receives or chains:
+        lines += [f'        log(ID_LOG_HDR, "{what} of {e}", "{name}");',
+                  "        osh_bring_up(rst, axilite, up);",
+                  *_stream_steps(plan, image)]
+    else:
+        lines += [f'        log(ID_LOG_HDR, "{what} of {e}: no stream the test serves (README)",',
+                  f'            "{name}");']
+    return lines + ["    end procedure;"]
 
 
 def _component(c: _bench.Component) -> list[str]:
