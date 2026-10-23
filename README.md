@@ -68,6 +68,40 @@ the versions the package pins, on `http://127.0.0.1:8765/`, also without network
 `--no-browser` does not open the browser). The Composer keeps its workspace in the browser storage of that address:
 on another port, and on openspacehdl.org, it starts with an empty one, and a saved file moves the work.
 
+## Offline use (from the first version with cores)
+
+A version with cores brings what a machine without network access needs in its one wheel: the sources of the cores,
+Open Logic FT and UVVM at the pinned versions, their Git history, and the portal with the Composer. VUnit and GHDL
+are not part of it.
+
+On a machine with network access, collect the wheels in one directory. VUnit is published as a source archive only;
+`pip wheel` builds a wheel from it, with its dependency:
+
+```shell
+pip download --no-deps openspacehdl==<version> -d wheels
+pip wheel vunit_hdl==4.7.1 -w wheels
+```
+
+Copy the directory to the machine without network and install from it alone:
+
+```shell
+pip install --no-index --find-links wheels openspacehdl vunit_hdl
+```
+
+Install GHDL on that machine as well and put it on the `PATH`, where VUnit finds it. Then, still without network:
+
+1. `openspacehdl serve` opens the portal on `http://127.0.0.1:8765/`: the website, the Composer and the documentation
+   of every core, at the versions of the package.
+2. In the Composer, compose the system, save it and use Export HDL. It downloads `<system>_hdl.zip` with the top
+   level, its compile order, its constraints and the system file; unpack it into one directory.
+3. `openspacehdl new <directory>/<system>.composer.json <project>` writes the project, and `python sim/run.py` in
+   the project runs its tests in GHDL.
+4. `openspacehdl export <dir> --git` writes the sources as Git repositories, for a build machine.
+
+The Composer of the portal uses the block catalog of the website commit the package pins, so a system saved with it
+has the pins of the package and `new` accepts it. A system saved on openspacehdl.org after a newer release of a core
+may pin other versions; `new` then refuses it and names the package version whose pins match, if one is known.
+
 ## Development
 
 The design of the next phase is in [docs/design.md](docs/design.md).
@@ -100,6 +134,8 @@ licence map `tools/portal/licences.json`. `--pin` writes those versions afresh.
 `python tools/check.py [--site <clone of open-space-hdl.github.io>]` runs the quality gates (pytest, markdownlint,
 no em-dash, family data) and fails on the exit status of the first gate that fails. `python tools/check.py
 --real-build ...` builds and checks a wheel with content from a copy of HEAD, on demand.
+
+[docs/release.md](docs/release.md) is the checklist of a release.
 
 ## Licence
 
