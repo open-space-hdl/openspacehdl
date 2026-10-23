@@ -25,8 +25,9 @@
 -- the architecture mdl, with the control record ModelIdx_g of ofb_pa_model_pkg). The harness joins
 -- lane i to lane i in both directions. The virtual channel RmapVc_g carries the RMAP initiator
 -- osh_tb_rmap_initiator through an OpenSPP spp_nchar (N-Char stream to the link stream of the
--- channel); the other channels send nothing and drain what they receive. RmapVc_g = -1: no RMAP
--- target behind the link; Cmd is ignored. The port starts its lanes itself (LaneStart and
+-- channel). Every other channel v carries packets through the queues Index_g, v of osh_link
+-- (osh_tb_link_pkg): received packets go to the receive queue, the packets of the send queue leave.
+-- RmapVc_g = -1: no RMAP target behind the link; Cmd is ignored. The port starts its lanes itself (LaneStart and
 -- AutoStart). LinkUp is '1' while the Data Link layer is initialised (DL_STATUS.LINK_STATE = 3, read
 -- from its own register file every 32 cycles of ClkSys).
 --
@@ -45,6 +46,8 @@ library openspp;
 
 library work;
     use work.osh_tb_pkg.all;
+    use work.osh_tb_link_pkg.all;
+    use work.osh_tb_linkvar_pkg.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Entity
@@ -62,7 +65,9 @@ entity osh_tb_spfi_far_end is
         -- Control record of the adapter model; the system's adapter uses record 0
         ModelIdx_g  : natural range 1 to 7   := 1;
         -- Reply timeout of the RMAP initiator, in microseconds
-        ReplyTimeoutUs_g : positive range 1 to 65535 := 1000
+        ReplyTimeoutUs_g : positive range 1 to 65535 := 1000;
+        -- Queues of the far end in osh_link
+        Index_g          : natural range 0 to 7      := 0
     );
     port (
         RefClk : in    std_logic;  -- reference clock of the transceivers, as for the system
@@ -330,6 +335,95 @@ begin
                 Cmd          => Cmd,
                 Res          => Res
             );
+
+    end generate;
+
+    -----------------------------------------------------------------------------------------------
+    -- Packets on the other virtual channels, through the queues
+    -----------------------------------------------------------------------------------------------
+    g_user : for V in 0 to NumVc_g - 1 generate
+
+        g_vc : if V /= RmapVc_g generate
+            constant Lo_c : natural := Beat_c * V;
+            constant Ko_c : natural := Beat_c / 8 * V;
+        begin
+
+            -- Received packets: the bytes of every beat that TKeep marks; TUser with TLast is the EEP
+            p_rx : process is
+                variable Bytes_v : t_osh_byte_array(0 to C_OSH_LINK_MAX_BYTES - 1);
+                variable N_v     : natural := 0;
+            begin
+
+                loop
+                    wait until rising_edge(ClkSys) and MVcTValid(V) = '1';
+
+                    for B in 0 to Beat_c / 8 - 1 loop
+
+                        if MVcTKeep(Ko_c + B) = '1' and N_v < C_OSH_LINK_MAX_BYTES then
+                            Bytes_v(N_v) := MVcTData(Lo_c + 8 * B + 7 downto Lo_c + 8 * B);
+                            N_v          := N_v + 1;
+                        end if;
+
+                    end loop;
+
+                    if MVcTLast(V) = '1' then
+                        osh_link.push_rx(Index_g, V, Bytes_v(0 to N_v - 1), MVcTUser(V) = '1');
+                        N_v := 0;
+                    end if;
+
+                end loop;
+
+            end process;
+
+            -- Packets of the send queue, Beat_c / 8 bytes per beat, the last beat with its valid bytes
+            -- (the beat is built in variables, so that the process drives only the slices of channel V)
+            p_tx : process is
+                variable Len_v  : natural;
+                variable I_v    : natural;
+                variable Data_v : std_logic_vector(Beat_c - 1 downto 0);
+                variable Keep_v : std_logic_vector(Beat_c / 8 - 1 downto 0);
+            begin
+
+                loop
+                    wait until rising_edge(ClkSys) and Rst = '0' and osh_link.tx_count(Index_g, V) > 0;
+                    Len_v := osh_link.tx_length(Index_g, V);
+                    I_v   := 0;
+
+                    loop
+                        Data_v := (others => '0');
+                        Keep_v := (others => '0');
+
+                        for B in 0 to Beat_c / 8 - 1 loop
+
+                            if I_v + B < Len_v then
+                                Data_v(8 * B + 7 downto 8 * B) := osh_link.tx_byte(Index_g, V, I_v + B);
+                                Keep_v(B)                      := '1';
+                            end if;
+
+                        end loop;
+
+                        SVcTData(Lo_c + Beat_c - 1 downto Lo_c)     <= Data_v;
+                        SVcTKeep(Ko_c + Beat_c / 8 - 1 downto Ko_c) <= Keep_v;
+                        SVcTLast(V)                                 <= '0';
+
+                        if I_v + Beat_c / 8 >= Len_v then
+                            SVcTLast(V) <= '1';
+                        end if;
+
+                        SVcTValid(V) <= '1';
+                        wait until rising_edge(ClkSys) and SVcTReady(V) = '1';
+                        I_v := I_v + Beat_c / 8;
+                        exit when I_v >= Len_v;
+                    end loop;
+
+                    SVcTValid(V) <= '0';
+                    SVcTLast(V)  <= '0';
+                    osh_link.pop_tx(Index_g, V);
+                end loop;
+
+            end process;
+
+        end generate;
 
     end generate;
 

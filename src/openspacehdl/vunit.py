@@ -34,6 +34,7 @@ RELAXED_GHDL_FLAGS = ("-frelaxed", "-Wno-hide", "-Wno-shared")
 OSH_TB_LIBRARY = "osh_tb"
 OSH_TB_DIR = Path(__file__).resolve().parent / "osh_tb"
 OSH_TB_FILES = ("osh_tb_pkg.vhd", "osh_tb_mem_pkg.vhd", "osh_tb_memvar_pkg.vhd", "osh_tb_check_pkg.vhd",
+                "osh_tb_link_pkg.vhd", "osh_tb_linkvar_pkg.vhd", "osh_tb_stream_pkg.vhd",
                 "osh_tb_axi_mem.vhd", "osh_tb_axilite_master.vhd", "osh_tb_axis_master.vhd", "osh_tb_axis_slave.vhd",
                 "osh_tb_rmap_initiator.vhd", "osh_tb_spw_far_end.vhd", "osh_tb_spfi_far_end.vhd")
 OSH_TB_CORES = ("openwire", "openrmap", "openspp", "openfibre")

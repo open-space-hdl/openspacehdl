@@ -25,7 +25,9 @@
 -- on, and on the virtual channel RmapVc_g an spp_nchar with an RMAP target whose memory is
 -- osh_tb_axi_mem), lane i joined to lane i. The test waits for the link and accesses the memory with
 -- RMAP over the link. Negative tests: lanes of the far end in electrical idle give the link timeout
--- and the reply timeout, a wrong key gives the status "invalid key".
+-- and the reply timeout, a wrong key gives the status "invalid key". The other virtual channel of the
+-- stand-in is an echo, so that every packet the far end sends on it comes back to its receive queue; a
+-- wrong expected packet gives a mismatch alert, a missing one the timeout.
 
 ---------------------------------------------------------------------------------------------------
 -- Libraries
@@ -50,6 +52,7 @@ library openrmap;
 library osh_tb;
     use osh_tb.osh_tb_pkg.all;
     use osh_tb.osh_tb_memvar_pkg.all;
+    use osh_tb.osh_tb_stream_pkg.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Entity
@@ -74,6 +77,7 @@ architecture sim of osh_tb_spfi_far_end_tb is
     constant Fill_c      : natural  := 1;
     constant Data_c      : natural  := 9;
     constant Start_c     : natural  := 16#1000# - 4;
+    constant Echo_c      : natural  := 1 - RmapVc_g;  -- the virtual channel without the RMAP target
 
     constant IdleLane_c : PaModelLane_t := (
         TxInvert => false,
@@ -309,6 +313,16 @@ begin
 
     SVcTUser(RmapVc_g) <= LinkUsr(0);
 
+    -- Echo on the other virtual channel
+    SVcTData(Beat_c * Echo_c + Beat_c - 1 downto Beat_c * Echo_c)
+        <= MVcTData(Beat_c * Echo_c + Beat_c - 1 downto Beat_c * Echo_c);
+    SVcTKeep(Beat_c / 8 * Echo_c + Beat_c / 8 - 1 downto Beat_c / 8 * Echo_c)
+        <= MVcTKeep(Beat_c / 8 * Echo_c + Beat_c / 8 - 1 downto Beat_c / 8 * Echo_c);
+    SVcTLast(Echo_c)  <= MVcTLast(Echo_c);
+    SVcTUser(Echo_c)  <= MVcTUser(Echo_c);
+    SVcTValid(Echo_c) <= MVcTValid(Echo_c);
+    MVcTReady(Echo_c) <= SVcTReady(Echo_c);
+
     i_target : entity openrmap.omap_core
         generic map (
             Target_g      => true,
@@ -441,6 +455,36 @@ begin
                 osh_rmap_transfer(Cmd, Res, false, x"FE", x"A5", to_unsigned(Start_c, 40), Write_c, 4, Res_v, "key");
                 check_value(Res_v.Error, 0, ERROR, "local error");
                 check_value(Res_v.Status, x"03", ERROR, "status invalid key");
+
+            elsif run("test_user_packets") then
+                -- Packets on the virtual channel without the RMAP target, through the echo of the stand-in;
+                -- lengths below, at and above a beat of the lanes
+                osh_await_link_up(LinkUp, 3 ms, "far end");
+                osh_link_send(0, Echo_c, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 1, 11),
+                              "packet 1");
+                osh_link_send(0, Echo_c, osh_cptp_header(x"FE", x"07") & osh_mem_bytes(to_unsigned(0, 64), 12, 12),
+                              "packet 2");
+                osh_link_send(0, Echo_c, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 301, 13),
+                              "packet 3");
+                osh_link_check(0, Echo_c, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 1, 11),
+                               200 us, "echo 1");
+                osh_link_check(0, Echo_c, osh_cptp_header(x"FE", x"07") & osh_mem_bytes(to_unsigned(0, 64), 12, 12),
+                               200 us, "echo 2");
+                osh_link_check(0, Echo_c, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 301, 13),
+                               200 us, "echo 3");
+
+            elsif run("test_user_packet_mismatch") then
+                osh_await_link_up(LinkUp, 3 ms, "far end");
+                osh_link_send(0, Echo_c, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 9, 14),
+                              "packet");
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                osh_link_check(0, Echo_c, osh_cptp_header(x"FE", x"01") & osh_mem_bytes(to_unsigned(0, 64), 9, 14),
+                               200 us, "echo against another packet");
+
+            elsif run("test_user_packet_timeout") then
+                osh_await_link_up(LinkUp, 3 ms, "far end");
+                increment_expected_alerts_and_stop_limit(TB_ERROR, 1);
+                osh_link_check(0, Echo_c, osh_cptp_header(x"FE", x"00"), 50 us, "no packet sent");
 
             elsif run("test_dead_link") then
                 -- The far end transmits electrical idle on every lane
