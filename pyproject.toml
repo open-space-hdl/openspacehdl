@@ -7,7 +7,7 @@ name = "openspacehdl"
 dynamic = ["version"]
 description = "Open Space HDL, open-source VHDL IP cores for spacecraft on-board data handling: early release that lists the family"
 readme = "README.md"
-license = "MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0"
+license = "MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0 AND CC-BY-4.0 AND OFL-1.1 AND LicenseRef-OpenSpaceHDL-Logo"
 license-files = ["LICENSE", "src/openspacehdl/licenses/*.txt", "src/openspacehdl/licenses/*.md"]
 requires-python = ">=3.10"
 authors = [{ name = "Julian Schneider", email = "julian.schneider@openspacehdl.org" }]
@@ -38,7 +38,8 @@ openspacehdl = "openspacehdl.cli:main"
 version = { attr = "openspacehdl.__version__" }
 
 [tool.setuptools.package-data]
-openspacehdl = ["data/*.json", "data/schema/*.json", "licenses/*", "templates/*", "osh_tb/*.vhd","hdl/**/*", "bundles/*.bundle"]
+openspacehdl = ["data/*.json", "data/schema/*.json", "licenses/*", "templates/*", "osh_tb/*.vhd","hdl/**/*", "bundles/*.bundle",
+                "portal/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

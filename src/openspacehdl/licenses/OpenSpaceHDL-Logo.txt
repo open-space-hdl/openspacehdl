@@ -1,0 +1,13 @@
+Open Space HDL logo: all rights reserved
+
+The Open Space HDL logo and its renderings are not licensed. Copyright (c) 2026 by Julian Schneider.
+
+No licence of this package covers them: not the MIT License, not Creative Commons Attribution 4.0, not the PSI HDL
+Library License, and no other. This also holds where a copy of a logo file sits in a repository that is under
+another licence.
+
+The portal of the package carries these files so that the website and the documentation sites look as published:
+
+- the website: assets/img/logo-horizontal-inverse.svg, assets/img/social-preview.png, favicon.svg, favicon.ico and
+  apple-touch-icon.png;
+- every documentation site: assets/images/logo.svg and assets/images/favicon.svg.
