@@ -3,7 +3,19 @@ library ieee;
     use ieee.std_logic_1164.all;
 
 library vunit_lib;
-    context vunit_lib.vunit_context;
+    context vunit_lib.vunit_run_context;
+
+library uvvm_util;
+    context uvvm_util.uvvm_util_context;
+
+library uvvm_vvc_framework;
+    use uvvm_vvc_framework.ti_vvc_framework_support_pkg.all;
+
+library bitvis_vip_axilite;
+    use bitvis_vip_axilite.vvc_methods_pkg.all;
+
+library osh_tb;
+    use osh_tb.osh_tb_pkg.all;
 
 use work.${entity}_th_pkg.all;
 
@@ -25,14 +37,17 @@ begin
     p_main : process
     begin
         test_runner_setup(runner, runner_cfg);
+        -- UVVM engine ready, the log of positive checks off (osh_tb_pkg)
+        osh_test_start;
         while test_suite loop
             if run("test_smoke") then
-                -- Reset, then let the system run on its clocks
-                osh_reset(osh_rst);
-                wait for 100 * C_SLOWEST_PERIOD;
+                -- Reset, link start and link up, the ID register of every register bank, the memory of the RMAP
+                -- targets behind a link (osh_smoke_test of the harness package)
+                osh_smoke_test(osh_rst, AXILITE_VVCT, osh_rmap_cmd, osh_rmap_res, osh_link_up);
             end if;
         end loop;
-        test_runner_cleanup(runner);
+        -- Fails on an unexpected alert and on an expected alert that did not occur
+        osh_test_end(runner);
     end process;
 
 end architecture sim;

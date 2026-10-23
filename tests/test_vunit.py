@@ -64,6 +64,8 @@ TREE = {
                   "hdl/ofb_pa_gty/compile_order_sim.txt":
                       "tb/ofb_tb_8b10b_pkg.vhd\nhdl/ofb_pa_gty/src/ofb_pa_gty.vhd\n",
                   "tb/ofb_tb_8b10b_pkg.vhd": "-- 8b10b\n", "hdl/ofb_pa_gty/src/ofb_pa_gty.vhd": "-- entity\n"},
+    "openrmap": {"compile_order.txt": "hdl/omap_core.vhd\n", "hdl/omap_core.vhd": "-- rmap\n"},
+    "openspp": {"compile_order.txt": "hdl/spp_nchar.vhd\n", "hdl/spp_nchar.vhd": "-- nchar\n"},
     "uvvm": {"uvvm_util/script/compile_order.txt": "# library uvvm_util\n../src/types_pkg.vhd\n",
              "uvvm_util/src/types_pkg.vhd": "-- types\n",
              "bitvis_vip_axilite/script/compile_order.txt":
@@ -88,6 +90,10 @@ def manifest(files):
              "verifiedWith": "4.7.0-ft.8", "models": {}},
             {**core, "id": "openfibre", "name": "OpenFibre", "tag": "v0.1.1", "library": "openfibre",
              "verifiedWith": "4.7.0-ft.6", "models": {"ofb_pa_gty": "hdl/ofb_pa_gty/compile_order_sim.txt"}},
+            {**core, "id": "openrmap", "name": "OpenRMAP", "tag": "v0.1.0", "library": "openrmap",
+             "verifiedWith": "4.7.0-ft.8", "models": {}},
+            {**core, "id": "openspp", "name": "OpenSPP", "tag": "v0.1.0", "library": "openspp",
+             "verifiedWith": "4.7.0-ft.8", "models": {}},
         ],
         "files": files,
     }
@@ -166,8 +172,8 @@ def test_a_core_that_is_coming_soon(inst):
 
 
 def test_a_public_core_without_a_release_in_the_catalog(inst):
-    with pytest.raises(osh.UnknownCoreError, match="OpenRMAP is not in openspacehdl"):
-        osh.add_core(FakeVUnit(), "openrmap")
+    with pytest.raises(osh.UnknownCoreError, match="OpenCompact is not in openspacehdl"):
+        osh.add_core(FakeVUnit(), "opencompact")
 
 
 def test_a_foreign_open_logic(inst):
@@ -217,6 +223,36 @@ def test_add_uvvm(inst):
 def test_add_uvvm_with_a_foreign_library(inst):
     with pytest.raises(osh.LibraryConflictError, match="uvvm_util"):
         osh.add_uvvm(FakeVUnit("uvvm_util"))
+
+
+def test_add_osh_tb_adds_uvvm_the_cores_of_the_far_ends_and_the_bench(inst):
+    vu = FakeVUnit()
+    lib = osh.add_osh_tb(vu)
+    assert lib is vu.libs["osh_tb"]
+    assert sorted(vu.libs) == ["bitvis_vip_axilite", "olo", "openfibre", "openrmap", "openspp", "openwire", "osh_tb",
+                               "uvvm_util"]
+    assert [Path(f).name for f in lib.files] == list(vunit.OSH_TB_FILES)
+    assert all(Path(f).is_file() for f in lib.files)
+    assert lib.options == [("ghdl.a_flags", RELAXED)]
+    # OpenFibre with the model of its adapter, which the SpaceFibre far end instantiates
+    assert rel(inst, vu.libs["openfibre"].files)[-1] == "openfibre/hdl/ofb_pa_gty/src/ofb_pa_gty.vhd"
+    assert osh.add_osh_tb(vu) is lib
+
+
+def test_add_osh_tb_uses_a_core_added_before(inst):
+    vu = FakeVUnit()
+    ow = osh.add_core(vu, "openwire")
+    osh.add_osh_tb(vu)
+    assert vu.libs["openwire"] is ow and len(ow.files) == 2
+
+
+def test_add_osh_tb_with_a_foreign_library(inst):
+    with pytest.raises(osh.LibraryConflictError, match="library osh_tb"):
+        osh.add_osh_tb(FakeVUnit("osh_tb"))
+
+
+def test_the_bench_components_are_the_files_of_osh_tb():
+    assert sorted(f.name for f in vunit.OSH_TB_DIR.glob("*.vhd")) == sorted(vunit.OSH_TB_FILES)
 
 
 def test_without_a_manifest(monkeypatch):

@@ -356,13 +356,16 @@ def system_env(proj, tmp_path, monkeypatch):
                     "uvvm_util/src/types_pkg.vhd": sha(hdl / "uvvm/uvvm_util/src/types_pkg.vhd")}
     inst = Installed(make_lock(snap), hdl)
     monkeypatch.setattr(vunit, "installed", lambda: inst)
-    return {"proj": proj, "inst": inst, "files": files}
+    # add_osh_tb has tests of its own (test_vunit.py); here it records the call and adds UVVM only
+    calls = []
+    monkeypatch.setattr(vunit, "add_osh_tb", lambda vu: calls.append(vu) or vunit.add_uvvm(vu))
+    return {"proj": proj, "inst": inst, "files": files, "osh_tb": calls}
 
 
 def test_add_system(system_env):
     vu = FakeVUnit()
     lib = vunit.add_system(vu, system_env["proj"])
-    assert lib is vu.libs[E]
+    assert lib is vu.libs[E] and system_env["osh_tb"] == [vu]
     assert sorted(vu.libs) == sorted(["olo", "openwire", "openrmap", E, "uvvm_util"])
     olo = [lib_ for lib_, p in system_env["files"] if lib_ == "olo"]
     assert len(vu.libs["olo"].files) == len(olo)

@@ -21,12 +21,13 @@ import hashlib
 import json
 import shutil
 import sys
+import textwrap
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 from string import Template
 
-from openspacehdl import __version__, composer, generate
+from openspacehdl import __version__, bench, composer, generate
 from openspacehdl.errors import OshError
 
 MANIFEST = Path(".openspacehdl") / "project.json"
@@ -56,17 +57,44 @@ def _md_header(source: str, lock_line: str) -> str:
     return "<!--\n" + "".join(line.lstrip() + "\n" for line in inner.splitlines()) + "-->"
 
 
+def _smoke_text(plan: bench.Plan) -> str:
+    """The section of the README on what test_smoke does for this system."""
+    items = []
+    for st in plan.starts:
+        items.append(f"- starts the link `{st.endpoint}` through the register file of its port (OpenWire `PORT_CTRL`: "
+                     f"AutoStart, driver and receiver enabled), the way the software of the system must: the port does "
+                     f"not start by itself;")
+    if plan.far_ends:
+        items.append("- waits until the far end of every link reports its link up: "
+                     + ", ".join(f"`{ep}`" for ep in plan.far_ends) + ";")
+    ports = sum(1 for c in plan.checks if c.via == "axilite")
+    rmap = len(plan.checks) - ports
+    if plan.checks:
+        how = [f"{ports} through their AXI4-Lite ports" if ports else "",
+               f"{rmap} with RMAP over a link" if rmap else ""]
+        items.append(f"- reads the ID register of every register bank ({' and '.join(h for h in how if h)}); a bank "
+                     f"without one answers a read of its base;")
+    for m in plan.memory_checks:
+        items.append(f"- writes 16 bytes with RMAP into the memory of `{m.space}` (the AXI4 memory responder of the "
+                     f"bench) across a 4 KB boundary, reads them back and checks that the bytes around them are "
+                     f"unchanged;")
+    items.append("- fails on every unexpected alert of the testbench.")
+    wrapped = [textwrap.fill(i, width=120, subsequent_indent="  ", break_on_hyphens=False) for i in items]
+    return "`test_smoke` resets the system and then\n\n" + "\n".join(wrapped)
+
+
 def files_of(system: composer.System, lock) -> tuple[dict[str, str], dict[str, str]]:
-    """(generated, seeds): project path -> text, for a checked system."""
+    """(generated, seeds): project path -> text, for a checked system; raises bench.BenchError."""
     e, source, line = system.entity, system.path.name, _lock_line(lock)
+    plan = bench.plan(system)
     vhdl_gen = generate.header("--", source, line, generated=True)
     generated = {
-        f"sim/tb/{e}_th_pkg.vhd": generate.harness_package(system, vhdl_gen),
-        f"sim/tb/{e}_th.vhd": generate.harness(system, vhdl_gen),
+        f"sim/tb/{e}_th_pkg.vhd": generate.harness_package(system, vhdl_gen, plan),
+        f"sim/tb/{e}_th.vhd": generate.harness(system, vhdl_gen, plan),
     }
     seeds = {
         "README.md": _template("README.md.tmpl", header=_md_header(source, line), entity=e, source=source,
-                               version=__version__),
+                               version=__version__, smoke=_smoke_text(plan)),
         "sim/run.py": _template("run.py.tmpl", header=generate.header("#", source, line, generated=False).rstrip(),
                                 entity=e),
         f"sim/tb/{e}_tb.vhd": _template("tb.vhd.tmpl", header=generate.header("--", source, line,
@@ -127,9 +155,9 @@ def new(source: Path, dest: Path | None = None, *, hdl: Path | None = None, lock
     dest = Path(dest) if dest else Path.cwd() / system.entity
     if dest.exists() and any(dest.iterdir()):
         raise ProjectError(f"{dest} is not empty; openspacehdl new writes only into a new or empty directory")
+    generated, seeds = files_of(system, lock)
     dest.mkdir(parents=True, exist_ok=True)
     inputs = _copy_inputs(system, dest)
-    generated, seeds = files_of(system, lock)
     for p, text in {**generated, **seeds}.items():
         _write(dest / p, text)
     _write(dest / MANIFEST, json.dumps(_manifest(system, lock, inputs, generated, list(seeds)), indent=2) + "\n")
@@ -181,6 +209,7 @@ def update(dest: Path | None = None, *, source: Path | None = None, hdl: Path | 
         system = composer.load(Path(source), hdl=hdl, lock=lock, schema_dir=schema_dir)
         if system.entity != m["system"]:
             raise ProjectError(f"{Path(source).name} is the system {system.entity}, the project is {m['system']}")
+        bench.plan(system)
         if not dry_run:
             _copy_inputs(system, dest, m.get("inputs", {}))
             system = composer.load(dest / m["composer"], hdl=dest / "hdl", lock=lock, schema_dir=schema_dir)

@@ -57,8 +57,10 @@ repositories with their history up to the pinned releases, without network.
 
 `openspacehdl new <system>.composer.json [<dir>]` writes a project for a system saved by the Open Space Composer and
 its export: the inputs, a VUnit simulation (`sim/run.py`, calling `openspacehdl.add_system`) and a system testbench
-with its harness. `openspacehdl update` regenerates the generated files after a change of the system and never
-overwrites a file the integrator changed.
+with its harness. The harness puts a bench component at every external interface (UVVM VVCs, an AXI4 memory, and at
+every SpaceWire or SpaceFibre link a far end with an RMAP initiator), and the smoke test brings the links up and reads
+the ID register of every register bank. `openspacehdl update` regenerates the generated files after a change of the
+system and never overwrites a file the integrator changed.
 
 ## Development
 
