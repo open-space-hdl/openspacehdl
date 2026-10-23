@@ -203,6 +203,13 @@ def test_build_writes_the_manifest():
     assert ocp["license"] == "PSI HDL Library License, Version 1.0"
 
 
+def test_build_records_the_schemas():
+    i = inputs()
+    i.schemas = {"system-2.json": "b" * 64, "system-1.json": "a" * 64}
+    schemas = lock.build(i, "0.1.0")["website"]["schemas"]
+    assert list(schemas.items()) == [("system-1.json", "a" * 64), ("system-2.json", "b" * 64)]
+
+
 def test_build_takes_the_highest_release_tag_of_a_commit():
     i = inputs()
     i.tags["openwire"] = {"v0.1.0": C_OWR, "v0.10.0": C_OWR, "v0.9.0": C_OWR}

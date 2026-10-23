@@ -63,6 +63,8 @@ class Inputs:
     models: dict[str, dict[str, str]] = field(default_factory=dict)
     # first line of the licence file: repository name -> licence
     licenses: dict[str, str] = field(default_factory=dict)
+    # Composer schemas of the website commit (composer/schema/): file name -> SHA-256
+    schemas: dict[str, str] = field(default_factory=dict)
 
 
 def _short(commit: str | None) -> str:
@@ -192,6 +194,7 @@ def build(inputs: Inputs, package_version: str, files: dict[str, dict[str, str]]
             "commit": inputs.website_commit,
             "catalog": inputs.catalog_id,
             "generator": inputs.generator,
+            **({"schemas": dict(sorted(inputs.schemas.items()))} if inputs.schemas else {}),
         },
         "referenceSystems": {
             "repository": f"{ORG}/{REFSYS_REPO}",

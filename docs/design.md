@@ -56,7 +56,7 @@ at the build of the package and never edited by hand.
 | --- | --- |
 | `format`, `version` | `openspacehdl-lock`, format version 1 |
 | `package` | Version of the package |
-| `website` | Commit of the website repository, the catalog ID of its `assets/composer/catalog.json` and the generator version of its Composer |
+| `website` | Commit of the website repository, the catalog ID of its `assets/composer/catalog.json`, the generator version of its Composer and the SHA-256 of its Composer schemas (`composer/schema/system-1.json`, `system-2.json`) |
 | `referenceSystems` | Release tag of open-space-hdl/reference-systems and its commit |
 | `openLogic` | The one Open Logic FT of this version: tag, commit, library `olo`, the commit of its submodule `3rdParty/en_cl_fix` |
 | `uvvm` | UVVM commit and the components the system testbenches use |
@@ -87,14 +87,16 @@ Example of one entry of `cores[]`:
 `tools/lock.py` writes the manifest from three inputs:
 
 1. the website repository at one commit: the pins of `_composer/catalog/sources.yml` (commit, library, file list,
-   `verified_with`, the Open Logic tag), the catalog ID and the generator version, and the project cards of
-   `_data/projects.yml` (public status, TRL);
+   `verified_with`, the Open Logic tag), the catalog ID and the generator version, the project cards of
+   `_data/projects.yml` (public status, TRL) and the Composer schemas, which the tool also writes to
+   `openspacehdl/data/schema/`;
 2. reference-systems at one release tag: the commits of its submodules in `cores/` and its `tools/composer_ref.txt`
    (the website commit its systems were checked against);
 3. the repositories of the cores and of Open Logic FT: the release tags of the pinned commits, the files of the
    snapshots and their hashes.
 
-The same tool with `--check` regenerates the manifest in memory and compares it with the committed one.
+The same tool with `--check` regenerates the manifest and the schemas in memory and compares them with the committed
+ones.
 
 ### 3.3 Consistency rules
 
@@ -107,7 +109,7 @@ The build of the package stops with an error when one of these rules fails:
 | L3 | There is one Open Logic FT: the tag of the catalog's `olo` source equals the commit of `cores/open-logic-ft` of reference-systems. |
 | L4 | The website commit of the manifest equals `tools/composer_ref.txt` of the reference-systems release. |
 | L5 | A core enters the manifest only when its card on the website is public and it is a source of the catalog. |
-| L6 | The hashes in `files` match the files of the snapshots in the wheel. |
+| L6 | The hashes in `files` match the files of the snapshots in the wheel, the refs in `bundles` those of the Git bundles, and the hashes of `website.schemas` the Composer schemas in `data/schema/`; the wheel has no other files there. |
 | L7 | The licence files of every snapshot repository are in the wheel, listed in `license-files`, and their licence is named in the licence expression of the wheel (section 4.4). |
 | L8 | The longest path in the wheel stays within the path budget of section 4.5. |
 | L9 | The wheel stays below the file size limit of the project on PyPI (section 4.3). |

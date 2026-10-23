@@ -14,10 +14,12 @@ also asks the remote of every repository (git ls-remote) which tags are publishe
 
 The manifest also lists every file of the source snapshots with its SHA-256 (rule L6), selected as tools/snapshot.py
 selects them, and the refs of the Git bundle of every repository (tools/bundles.py); UVVM is read from --uvvm, by
-default the uvvm submodule of the first core clone that has the commit.
+default the uvvm submodule of the first core clone that has the commit. The Composer schemas of the website commit
+(composer/schema/system-1.json and system-2.json) go to src/openspacehdl/data/schema/, their SHA-256 into the
+manifest.
 
-Default: write the manifest; nothing is written when a rule fails. --check: compare the committed manifest with the
-one the inputs give. --report: print the violations only. --waive <rule> accepts the violations of a rule and
+Default: write the manifest and the schemas; nothing is written when a rule fails. --check: compare the committed
+manifest and schemas with the ones the inputs give. --report: print the violations only. --waive <rule> accepts the violations of a rule and
 records it in the manifest; such a manifest serves tests of the build only and is never released. Exit status 0 on
 success, 1 on a violation or a difference, 2 on an error of the inputs.
 
@@ -49,6 +51,8 @@ import snapshot  # noqa: E402
 OUT = ROOT / "src" / "openspacehdl" / "data" / "lock.json"
 GENERATOR = re.compile(r"export const GENERATOR = \{ name: '[^']*', version: '([^']+)' \}")
 OLO_SUBMODULES = ("3rdParty/en_cl_fix",)
+SCHEMA_DIR = "composer/schema"
+SCHEMAS = ("system-1.json", "system-2.json")
 
 
 class InputError(Exception):
@@ -66,6 +70,17 @@ def show(repo: Path, rev: str, path: str) -> str | None:
     r = subprocess.run(["git", "-C", str(repo), "show", f"{rev}:{path}"], capture_output=True, text=True,
                        encoding="utf-8")
     return r.stdout if r.returncode == 0 else None
+
+
+def schema_texts(site: Path, rev: str) -> dict[str, bytes]:
+    """The Composer schemas of the website at rev, byte for byte: file name -> content."""
+    out = {}
+    for name in SCHEMAS:
+        r = subprocess.run(["git", "-C", str(site), "show", f"{rev}:{SCHEMA_DIR}/{name}"], capture_output=True)
+        if r.returncode != 0:
+            raise InputError(f"website {rev[:7]} has no {SCHEMA_DIR}/{name}")
+        out[name] = r.stdout
+    return out
 
 
 def tags(repo: Path) -> dict[str, str]:
@@ -104,6 +119,7 @@ def gather(site: Path, site_commit: str, refsys: Path, refsys_tag: str, repos: P
     if not m:
         raise InputError(f"website {sha[:7]}: no generator version in assets/composer/js/model/serialize.js")
     projects = yaml.safe_load(show(site, sha, "_data/projects.yml") or "[]")
+    schemas = {name: snapshot.sha256(b) for name, b in schema_texts(site, sha).items()}
     cards = {p["repo"]: {"public": bool(p.get("public")), "trl": p.get("trl")} for p in projects if "repo" in p}
 
     rs_commit = git(refsys, "rev-parse", "--verify", f"refs/tags/{refsys_tag}^{{commit}}").strip()
@@ -161,6 +177,7 @@ def gather(site: Path, site_commit: str, refsys: Path, refsys_tag: str, repos: P
         uvvm=uvvm,
         models=models,
         licenses=licenses,
+        schemas=schemas,
     )
 
 
@@ -207,15 +224,24 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if waive:
         print(f"lock: the manifest waives {', '.join(waive)}; it serves tests of the build only", file=sys.stderr)
+    schemas = {args.out.parent / "schema" / name: b for name, b in schema_texts(args.site, inputs.website_commit)
+               .items()}
     if args.check:
         current = args.out.read_text(encoding="utf-8") if args.out.exists() else ""
-        if current != text:
-            print(f"lock: {args.out.name} differs from the inputs", file=sys.stderr)
+        stale = [args.out.name] if current != text else []
+        stale += [f"schema/{f.name}" for f, b in schemas.items() if not f.is_file() or f.read_bytes() != b]
+        for name in stale:
+            print(f"lock: {name} differs from the inputs", file=sys.stderr)
+        if stale:
             return 1
-        print(f"{args.out.name} is current")
+        print(f"{args.out.name} and the schemas are current")
         return 0
     args.out.write_text(text, encoding="utf-8", newline="\n")
     print(f"wrote {args.out}")
+    for f, b in schemas.items():
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(b)
+        print(f"wrote {f}")
     return 0
 
 
