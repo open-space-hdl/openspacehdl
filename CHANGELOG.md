@@ -49,6 +49,8 @@ All notable changes of the package. Versions follow [semantic versioning](https:
   checks rule L11 (no request to another origin, the links resolve, the diagrams keep their lightbox) and the licence
   map (rule L7); `data/portal.json` lists every file with its hash and licence, and the wheel check compares the wheel
   with it. The licence expression gains `CC-BY-4.0`, `OFL-1.1` and `LicenseRef-OpenSpaceHDL-Logo`.
+- The optional dependency `openspacehdl[vunit]`: VUnit in a version the package is tested with
+  (`vunit_hdl>=4.7.1,<5.1`; a development release of 5.0 named explicitly).
 
 ### Changed
 

@@ -35,7 +35,16 @@ A project that is not yet public is listed as "Coming soon", without links.
 ## VUnit (from the first version with cores)
 
 A version with cores carries them with Open Logic FT and UVVM at the versions its lock manifest pins
-(`openspacehdl lock` shows them), and adds them to a VUnit project:
+(`openspacehdl lock` shows them), and adds them to a VUnit project. The optional dependency `vunit` installs VUnit
+with it, in a version the package is tested with (4.7.1 up to the 5.0 line):
+
+```shell
+pip install "openspacehdl[vunit]"
+pip install "openspacehdl[vunit]" vunit_hdl==5.0.0.dev7   # the 5.0 development line, named explicitly
+```
+
+The source archive of VUnit 5.0.0.dev7 builds only with `setuptools<81` and `setuptools_scm>=8` installed first and
+`--no-build-isolation`.
 
 ```python
 from vunit import VUnit
@@ -75,17 +84,16 @@ Open Logic FT and UVVM at the pinned versions, their Git history, and the portal
 are not part of it.
 
 On a machine with network access, collect the wheels in one directory. VUnit is published as a source archive only;
-`pip wheel` builds a wheel from it, with its dependency:
+`pip wheel` takes the wheel of the package and builds one of VUnit, with its dependency:
 
 ```shell
-pip download --no-deps openspacehdl==<version> -d wheels
-pip wheel vunit_hdl==4.7.1 -w wheels
+pip wheel "openspacehdl[vunit]==<version>" -w wheels
 ```
 
 Copy the directory to the machine without network and install from it alone:
 
 ```shell
-pip install --no-index --find-links wheels openspacehdl vunit_hdl
+pip install --no-index --find-links wheels "openspacehdl[vunit]"
 ```
 
 Install GHDL on that machine as well and put it on the `PATH`, where VUnit finds it. Then, still without network:
