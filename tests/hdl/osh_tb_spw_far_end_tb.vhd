@@ -25,7 +25,10 @@
 -- osh_tb_axi_mem as its memory). The test starts the port through its register file (PORT_CTRL, as the
 -- generated smoke test does), waits for the link and accesses the memory with RMAP over the link.
 -- Negative tests: without the start the link stays down, cut lines give the link timeout and the
--- reply timeout, a wrong key gives the status "invalid key".
+-- reply timeout, a wrong key gives the status "invalid key". Packets of other protocols: the target of
+-- the stand-in passes them on (Passthrough) to an echo, so that every packet the far end sends comes
+-- back to its receive queue; a wrong expected packet gives a mismatch alert, a missing one the timeout,
+-- a shorter one the length alert, and one that the echo ends with an error end (EEP) the EOP alert.
 
 ---------------------------------------------------------------------------------------------------
 -- Libraries
@@ -53,6 +56,7 @@ library openrmap;
 library osh_tb;
     use osh_tb.osh_tb_pkg.all;
     use osh_tb.osh_tb_memvar_pkg.all;
+    use osh_tb.osh_tb_stream_pkg.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Entity
@@ -96,6 +100,9 @@ architecture sim of osh_tb_spw_far_end_tb is
 
     signal PktInData, PktOutData : std_logic_vector(7 downto 0);
     signal PktInLast, PktInValid, PktInReady, PktOutLast, PktOutValid, PktOutReady : std_logic;
+    signal EchoData, EchoBack : std_logic_vector(7 downto 0);
+    signal EchoLast, EchoValid, EchoReady : std_logic;
+    signal ForceEep : std_logic := '0';
 
     signal MAwAddr, MArAddr, MWData, MRData : std_logic_vector(31 downto 0);
     signal MAwLen, MArLen : std_logic_vector(7 downto 0);
@@ -205,11 +212,14 @@ begin
             RReady  => RReady
         );
 
+    -- The echo returns every packet as it came, or with an error end (EEP: the marker with TData(0) '1')
+    EchoBack <= EchoData(7 downto 1) & '1' when ForceEep = '1' and EchoLast = '1' else EchoData;
+
     i_target : entity openrmap.omap_core
         generic map (
             Target_g      => true,
             Initiator_g   => false,
-            Passthrough_g => false
+            Passthrough_g => true
         )
         port map (
             Clk               => Clk,
@@ -222,6 +232,15 @@ begin
             M_Pkt_TLast       => PktOutLast,
             M_Pkt_TValid      => PktOutValid,
             M_Pkt_TReady      => PktOutReady,
+            -- Echo of the packets of other protocols
+            M_User_TData      => EchoData,
+            M_User_TLast      => EchoLast,
+            M_User_TValid     => EchoValid,
+            M_User_TReady     => EchoReady,
+            S_User_TData      => EchoBack,
+            S_User_TLast      => EchoLast,
+            S_User_TValid     => EchoValid,
+            S_User_TReady     => EchoReady,
             S_AxiLite_ArAddr  => (others => '0'),
             S_AxiLite_ArValid => '0',
             S_AxiLite_AwAddr  => (others => '0'),
@@ -350,6 +369,62 @@ begin
                 osh_rmap_transfer(Cmd, Res, false, x"FE", x"A5", to_unsigned(Start_c, 40), Write_c, 4, Res_v, "key");
                 check_value(Res_v.Error, 0, ERROR, "local error");
                 check_value(Res_v.Status, x"03", ERROR, "status invalid key");
+
+            elsif run("test_user_packets") then
+                -- Packets of another protocol (Protocol Identifier 0x02) through the echo of the stand-in, next
+                -- to RMAP: each comes back byte for byte
+                startPort;
+                osh_await_link_up(LinkUp, 1 ms, "far end");
+                osh_link_send(0, 0, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 1, 11),
+                              "packet 1");
+                osh_link_send(0, 0, osh_cptp_header(x"FE", x"07") & osh_mem_bytes(to_unsigned(0, 64), 17, 12),
+                              "packet 2");
+                osh_rmap_write(Cmd, Res, x"FE", x"00", to_unsigned(Start_c, 40), Write_c, "RMAP between them");
+                osh_link_send(0, 0, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 300, 13),
+                              "packet 3");
+                osh_link_check(0, 0, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 1, 11),
+                               200 us, "echo 1");
+                osh_link_check(0, 0, osh_cptp_header(x"FE", x"07") & osh_mem_bytes(to_unsigned(0, 64), 17, 12),
+                               200 us, "echo 2");
+                osh_link_check(0, 0, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 300, 13),
+                               500 us, "echo 3");
+
+            elsif run("test_user_packet_mismatch") then
+                -- A packet that differs in one byte from the expected one raises one alert
+                startPort;
+                osh_await_link_up(LinkUp, 1 ms, "far end");
+                osh_link_send(0, 0, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 9, 14),
+                              "packet");
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                osh_link_check(0, 0, osh_cptp_header(x"FE", x"01") & osh_mem_bytes(to_unsigned(0, 64), 9, 14),
+                               200 us, "echo against another packet");
+
+            elsif run("test_user_packet_short") then
+                -- A packet one byte shorter than the expected one raises one alert, its length
+                startPort;
+                osh_await_link_up(LinkUp, 1 ms, "far end");
+                osh_link_send(0, 0, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 9, 15),
+                              "packet");
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                osh_link_check(0, 0, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 10, 15),
+                               200 us, "echo against a longer packet");
+
+            elsif run("test_user_packet_error_end") then
+                -- A packet that ends with an error end (EEP) raises one alert, its end of packet
+                startPort;
+                osh_await_link_up(LinkUp, 1 ms, "far end");
+                ForceEep <= '1';
+                osh_link_send(0, 0, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 9, 16),
+                              "packet");
+                increment_expected_alerts_and_stop_limit(ERROR, 1);
+                osh_link_check(0, 0, osh_cptp_header(x"FE", x"00") & osh_mem_bytes(to_unsigned(0, 64), 9, 16),
+                               200 us, "echo with an error end");
+
+            elsif run("test_user_packet_timeout") then
+                startPort;
+                osh_await_link_up(LinkUp, 1 ms, "far end");
+                increment_expected_alerts_and_stop_limit(TB_ERROR, 1);
+                osh_link_check(0, 0, osh_cptp_header(x"FE", x"00"), 50 us, "no packet sent");
 
             elsif run("test_no_start") then
                 -- The port of the stand-in neither starts nor answers: no link without the start

@@ -331,7 +331,7 @@ the reason, when:
     hdl/                          the export, copied: top level, compile order, constraints, address map, regs.h
     sim/run.py                    seed: VUnit entry point, calls openspacehdl.add_system
     sim/tb/<system>_th.vhd        generated: harness
-    sim/tb/<system>_th_pkg.vhd    generated: constants and procedures of the system, the smoke test
+    sim/tb/<system>_th_pkg.vhd    generated: constants and procedures of the system, the smoke and stream tests
     sim/tb/<system>_tb.vhd        seed: the test cases
     README.md                     seed
     .openspacehdl/project.json    manifest of the generated files
@@ -385,17 +385,28 @@ target through `connections`: the target's `S_Pkt` directly on `M_Pkt` of an `ow
 `S_Link` comes from `M_Vc[k]` of an `ofb_core` whose `Phy` goes to an `ofb_pa_gty` with external pins (virtual
 channel k). In every Composer example and reference system with a SpaceFibre link the target is on virtual channel 0.
 
+The far ends carry user packets as well. The initiator of the SpaceWire far end passes every packet that is not an
+RMAP reply to its user port (`Passthrough_g`); the SpaceFibre far end has a user port at every virtual channel other
+than the one of the RMAP initiator. Both put the packets they receive into the receive queue of their far end
+(`Index_g`) and virtual channel in `osh_link`, the shared variable of `osh_tb_linkvar_pkg` (protected type of
+`osh_tb_link_pkg`, end of packet or error end per packet), and send the packets of the transmit queue. The procedures
+of `osh_tb_stream_pkg` use the queues: `osh_link_send`, `osh_link_wait` and `osh_link_check` (length, end of packet
+and every byte, one error at the first byte that differs), the packet formats `osh_cptp_header` and
+`osh_space_packet`, and `osh_link_check_chunks` for the chunks of a chain.
+
 `add_system` adds `osh_tb` (`openspacehdl.add_osh_tb`) and with it UVVM and the cores the far ends instantiate
 (OpenWire, OpenRMAP, OpenSPP and OpenFibre with the model of its adapter), also when the system does not use them.
 
 The harness package `<system>_th_pkg.vhd` holds the constants of the system (clock periods, the number of far ends and
 the time each may take for its link), the signals between the testbench and the harness (`osh_rst`; per far end the
-RMAP command and result and the link state: `osh_rmap_cmd`, `osh_rmap_res`, `osh_link_up`) and the procedures
-`osh_reset` and `osh_smoke_test`. The seed testbench `<system>_tb.vhd` is a VUnit runner with UVVM. It starts with
-`osh_test_start` (the UVVM engine ready, the log of positive checks off, and off the warning UVVM raises once when a
-time stamp of the log has more decimals than it shows, which the 156.25 MHz lane clock of SpaceFibre causes and which
-says nothing about the system). Its first test case `test_smoke` calls
-`osh_smoke_test(osh_rst, AXILITE_VVCT, osh_rmap_cmd, osh_rmap_res, osh_link_up)`, the same call for every system. Its
+RMAP command and result and the link state: `osh_rmap_cmd`, `osh_rmap_res`, `osh_link_up`), the test keys of the
+stream test and the procedures `osh_reset`, `osh_bring_up` (the reset, the link starts and every link up),
+`osh_smoke_test`, `osh_stream_test` and `osh_image_test`. The seed testbench `<system>_tb.vhd` is a VUnit runner with
+UVVM. It starts with `osh_test_start` (the UVVM engine ready, the log of positive checks off, and off the warning
+UVVM raises once when a time stamp of the log has more decimals than it shows, which the 156.25 MHz lane clock of
+SpaceFibre causes and which says nothing about the system). Its first test case `test_smoke` calls
+`osh_smoke_test(osh_rst, AXILITE_VVCT, osh_rmap_cmd, osh_rmap_res, osh_link_up)`, its second `test_streams` calls
+`osh_stream_test(osh_rst, AXILITE_VVCT, AXISTREAM_VVCT, osh_link_up)`, the same calls for every system. Its
 test end `osh_test_end` fails on unexpected alerts and on expected alerts that did not occur: it compares the counters
 of every alert level from WARNING to TB_FAILURE itself and ends a mismatch with an assertion of severity failure. A
 test end that signals a mismatch with `alert(TB_ERROR)` cannot stop a test that raised the TB_ERROR stop limit (a
@@ -428,11 +439,64 @@ The examples have register banks behind their ports; the reference systems reach
 so step 4 runs with RMAP there. The four examples whose RMAP target has an external memory get step 5, so that the far
 end and its initiator are exercised beyond the link start in every system with a target.
 
+The stream test:
+
+1. brings the system up as steps 1 to 3 of the smoke test (`osh_bring_up`);
+2. waits 2100 cycles of the clock of every `spp_core` of the checks: its APID tables are ready 2048 cycles after the
+   reset;
+3. lets the AXI4-Stream VVCs wait for a handshake as long as a chunk of a chain may take (`max_wait_cycles`): the links
+   pace the streams. `await_completion` with 1 ms bounds every packet, 20 ms every chunk;
+4. loads a test key into slot 0 of every `ocr_core` of a chain, with generated IVs (step 3 of the programming sequence
+   of OpenCrypto), and checks that `STATUS.BUSY` is '0'. The keys are published test vectors, declared in the harness
+   package as test values, not for use in a mission: for AES-128 the key of test case 3 of the GCM specification, for
+   AES-192 and AES-256 the keys of NIST SP 800-38A, F.1.3 and F.1.5; the fixed field 0xCAFEBABE and the first
+   invocation counter 0xFACEDBADDECAF888 are the IV of GCM test case 3. A test of the package encrypts with each key
+   (an AES of the test, FIPS 197) and compares the result with the published ciphertext or hash subkey;
+5. checks the paths through OpenSPP exactly, at every `spp_core` in the configuration the checks know (CPTP layer,
+   Octet String Service at every port, APID paths enabled at the reset) whose link has a far end:
+   - at every send port `S_Tx[k]` two SDUs of 7 and 301 bytes with APID 0x100 + k; the far end must receive each as a
+     CPTP packet (`FE 02 00 00`, the reset value of `DEST_CTRL`) with the Space Packet (telemetry, no secondary
+     header, unsegmented, sequence count 0 and 1), byte for byte;
+   - at receive port 0: the far end sends two Space Packets with SDUs of 5 and 259 bytes, APID 0x200 and the CPTP User
+     Application value 0x5A to the `Tla_g` of the core; the port must deliver each SDU with the user field APID and
+     User Application value;
+   - the data of every packet is `osh_mem_bytes` with its own seed, so it does not repeat with a short period;
+6. checks the framing of every processing chain from a byte stream that ends in `ocr_framer` and `ocr_core` (dense
+   output) at a send port of an `spp_core` with a fixed APID:
+   - into the framer input one message of `ChunkBytes_g` + 259 bytes (4355 bytes with the default): not a multiple of
+     16 and longer than one chunk;
+   - the far end must receive the chunks as CPTP packets with Space Packets of the APID of the port, counted from 0,
+     each with the IV (fixed field, invocation counter + chunk number) and the AAD (the position in bits 7:6 of its
+     first byte, every other bit '0'); for the message also the position and length of every chunk and their number;
+   - the check ends at the chunk marked last and would take one chunk more, so the position ends it, not the limit;
+   - the check does not decrypt: the ciphertext and the tag are not checked (the bench has no AES-GCM model; OpenCrypto
+     verifies them in its own regression);
+7. reads the counters of every `spp_core` and `ocr_core` of the checked paths through their AXI4-Lite ports:
+   `TX_PACKETS` the SDUs sent plus the chunks, `RX_PACKETS` the packets received, `ENCRYPTIONS` the chunks, every error
+   counter 0;
+8. waits for the completion of the VVCs; the test end then fails on any alert.
+
+A chain from a compressor (`ocp_core`) has a test case of its own, `test_image_stream` (`osh_image_test`), which the
+seed testbench has only for a system with such a chain. It brings the system up as the stream test does, loads the
+test key and sends one image of `XSize_g` x `YSize_g` x `ZSize_g` samples (`osh_samples`, 8192 samples per VVC command,
+every sample depending on every bit of its index); the far end must receive its chunks with the checks of step 6 up to
+the last chunk of the image, with at most `ChunkBytes_g` bytes per chunk; then the counters of its cores. The image
+takes hours to simulate in GHDL: with samples that depend on every index bit the compressed image is nearly as large
+as the input, and the SpaceWire link of the example carries it at about 200 ns per sample, about 50 ms of simulated
+time for the image. The README of such a project says so and shows the run without it; the system tests of the
+package (section 9) run `test_smoke` and `test_streams`.
+
+A stream the checks do not serve stays idle, and the README of the project says why (another configuration of the
+`spp_core`, a receive port other than 0, a chain the generator does not know, a register file that is not an external
+port). For a system without a stream the test serves, `osh_stream_test` and `osh_image_test` only log this.
+
 The bench components have unit benches of their own (`tests/hdl/`, VUnit and UVVM in GHDL, run by
 `tests/test_osh_tb_hdl.py` with `OPENSPACEHDL_HDL_TESTS=1` on an installation with snapshots): the memory responder with
 every burst type and the alerts of the AXI4 rules, the initiator against an `omap_core` target, each far end against a
 second port in the place of the system; each with negative tests (a wrong key gives the status "invalid key", a dead
-link the timeout), so that the smoke test cannot pass with a far end that never answers.
+link the timeout), so that the smoke test cannot pass with a far end that never answers. The far end benches send user
+packets of several lengths between RMAP transactions and check them at the other end; a changed byte must give one
+error, a packet that never arrives the timeout.
 
 ### 6.4 update
 
@@ -529,7 +593,7 @@ each documentation site with MkDocs from `tools/docs` of the core at its tag.
 | Unit | Lock generation and the rules L1 to L6 with consistent and inconsistent fixture sets; every refusal of section 6.1; the interface type mapping; the update table of section 6.4; `add_core` and its errors against a recording stand-in of the VUnit object; `serve` on an ephemeral port of 127.0.0.1; `export` as a tree and with `--git` | pytest |
 | Mutation | Each refusal and each update rule is proven by a mutation of the package that makes a test fail; a system file with a wrong ID value makes the smoke test fail | pytest, GHDL |
 | Cores | `add_core` of every core, alone and all in one project, compiles in GHDL | GHDL through VUnit |
-| Systems | Every example of the Composer (seven at the website commit of the lock) and the systems of the reference-systems release: `new`, then `python sim/run.py`, the smoke test passes; `update` right after `new` changes nothing | GHDL through VUnit |
+| Systems | Every example of the Composer (seven at the website commit of the lock) and the systems of the reference-systems release: `new`, then `python sim/run.py`, the smoke test and the stream test pass; `update` right after `new` changes nothing | GHDL through VUnit |
 | Exports | The exports of the examples come from `tools/composer_hdl.mjs` of the website at the commit of the lock; the CI checks with it that the stored exports are current (exit status 0) | Node.js, CI only |
 | Wheel | Build of wheel and sdist with the rules L7 (licences) and L8 (path budget), `twine check --strict`, install without network into fresh environments on Python 3.10 and 3.14, the commands run | pip, twine |
 | Deep install | On Windows, an install into a virtual environment whose `site-packages` path is 120 characters long; from there `add_core` of every core compiles in GHDL and one system passes its smoke test | pip, GHDL |

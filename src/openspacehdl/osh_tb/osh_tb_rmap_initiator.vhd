@@ -48,7 +48,9 @@ library work;
 entity osh_tb_rmap_initiator is
     generic (
         ClkHz_g          : positive;                       -- frequency of Clk, at least 1 MHz
-        ReplyTimeoutUs_g : positive range 1 to 65535 := 1000  -- reply timeout of a command, in microseconds
+        ReplyTimeoutUs_g : positive range 1 to 65535 := 1000; -- reply timeout of a command, in microseconds
+        -- Packets of other protocols (second character not 0x01) on M_User/S_User (OpenRMAP Passthrough)
+        Passthrough_g    : boolean                   := false
     );
     port (
         Clk          : in    std_logic;
@@ -62,6 +64,15 @@ entity osh_tb_rmap_initiator is
         S_Pkt_TLast  : in    std_logic;
         S_Pkt_TValid : in    std_logic;
         S_Pkt_TReady : out   std_logic;
+        -- Packets of other protocols (Passthrough_g), N-Char streams as M_Pkt and S_Pkt
+        M_User_TData  : out   std_logic_vector(7 downto 0);
+        M_User_TLast  : out   std_logic;
+        M_User_TValid : out   std_logic;
+        M_User_TReady : in    std_logic                    := '1';
+        S_User_TData  : in    std_logic_vector(7 downto 0) := (others => '0');
+        S_User_TLast  : in    std_logic                    := '0';
+        S_User_TValid : in    std_logic                    := '0';
+        S_User_TReady : out   std_logic;
         -- Commands of the testbench
         Cmd          : in    t_osh_rmap_cmd;
         Res          : out   t_osh_rmap_res := C_OSH_RMAP_RES_IDLE
@@ -103,7 +114,7 @@ begin
         generic map (
             Target_g       => false,
             Initiator_g    => true,
-            Passthrough_g  => false,
+            Passthrough_g  => Passthrough_g,
             Transactions_g => 1,
             TickCycles_g   => TickCycles_c,
             Timeout_g      => Timeout_c
@@ -119,10 +130,14 @@ begin
             M_Pkt_TLast       => M_Pkt_TLast,
             M_Pkt_TValid      => M_Pkt_TValid,
             M_Pkt_TReady      => M_Pkt_TReady,
-            M_User_TData      => open,
-            M_User_TLast      => open,
-            M_User_TValid     => open,
-            S_User_TReady     => open,
+            M_User_TData      => M_User_TData,
+            M_User_TLast      => M_User_TLast,
+            M_User_TValid     => M_User_TValid,
+            M_User_TReady     => M_User_TReady,
+            S_User_TData      => S_User_TData,
+            S_User_TLast      => S_User_TLast,
+            S_User_TValid     => S_User_TValid,
+            S_User_TReady     => S_User_TReady,
             S_AxiLite_ArAddr  => (others => '0'),
             S_AxiLite_ArValid => '0',
             S_AxiLite_ArReady => open,

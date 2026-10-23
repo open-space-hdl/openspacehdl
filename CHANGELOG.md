@@ -33,6 +33,12 @@ All notable changes of the package. Versions follow [semantic versioning](https:
   links, waits for them, reads the ID register of every register bank (through its port or with RMAP over a link)
   and checks the memory of every RMAP target behind a link. `new` refuses AXI4 slaves and systems whose testbench
   it cannot make.
+- The stream test `test_streams` of the generated testbench (`osh_stream_test`): packets through every send port and
+  receive port 0 of OpenSPP, checked byte for byte at the far end of its link and at the port; every processing chain
+  of `ocr_framer` and `ocr_core` towards OpenSPP from a byte stream, with a published test key, its chunks checked for
+  their framing; the packet and error counters of the cores. A chain from `ocp_core` gets the test case
+  `test_image_stream` with one full image, which runs for hours in GHDL. The far ends carry user packets
+  (`osh_tb_link_pkg`, `osh_tb_stream_pkg`), and the README of the project lists the streams the tests leave idle.
 - The Composer schemas in the package: `tools/lock.py` writes `system-1.json` and `system-2.json` of the website
   commit of the lock to `data/schema/` and records their SHA-256 in the manifest; `tools/wheel_check.py` checks
   them (rule L6).

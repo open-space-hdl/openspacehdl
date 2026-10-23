@@ -115,6 +115,75 @@ class MemoryCheck:
 
 
 @dataclass
+class StreamSend:
+    """Class a, send direction: SDUs at an spp_core send port, checked byte for byte at the far end."""
+
+    endpoint: str
+    axis: int
+    spp: str
+    far: int
+    vc: int
+    apid: int
+    user_width: int
+    data_width: int
+    lengths: tuple[int, ...] = (7, 301)
+
+
+@dataclass
+class StreamReceive:
+    """Class a, receive direction: Space Packets from the far end, checked at an spp_core receive port."""
+
+    endpoint: str
+    axis: int
+    spp: str
+    far: int
+    vc: int
+    apid: int
+    tla: str
+    ua: int
+    user_width: int
+    data_width: int
+    lengths: tuple[int, ...] = (5, 259)
+
+
+@dataclass
+class StreamChain:
+    """Class b: a processing chain from a stream input through ocr_framer and ocr_core to an spp_core send port."""
+
+    endpoint: str
+    axis: int
+    kind: str  # "bytes" (into the framer) or "samples" (into ocp_core)
+    data_width: int
+    spp: str
+    far: int
+    vc: int
+    apid: int
+    ocr: str
+    chunk_bytes: int
+    message_bytes: int = 0  # bytes of the one message ("bytes"); 0 for "samples"
+    samples: int = 0  # samples of the one image ("samples")
+
+
+@dataclass
+class KeyLoad:
+    """The test key loaded into slot 0 of an ocr_core with generated IVs before a chain is checked."""
+
+    ocr: str
+    vvc: int
+    key_bits: int
+
+
+@dataclass
+class Counters:
+    """The counters of a core read after the stream checks: (register offset, name, expected value or None)."""
+
+    instance: str
+    vvc: int
+    addr_width: int
+    reads: list[tuple[int, str, int | None]]
+
+
+@dataclass
 class Plan:
     components: list[Component] = field(default_factory=list)
     clocks: list[Clock] = field(default_factory=list)
@@ -122,6 +191,13 @@ class Plan:
     starts: list[Start] = field(default_factory=list)
     checks: list[RegisterCheck] = field(default_factory=list)
     memory_checks: list[MemoryCheck] = field(default_factory=list)
+    sends: list[StreamSend] = field(default_factory=list)
+    receives: list[StreamReceive] = field(default_factory=list)
+    chains: list[StreamChain] = field(default_factory=list)
+    key_loads: list[KeyLoad] = field(default_factory=list)
+    counters: list[Counters] = field(default_factory=list)
+    spp_clocks: list[str] = field(default_factory=list)  # clock ports of the spp_core of the stream checks
+    stream_notes: list[str] = field(default_factory=list)  # streams that stay idle, and why
 
 
 def width(port_type: str) -> int:
@@ -158,9 +234,12 @@ class _System:
         self.domains = {c["id"]: c for c in r.get("clocks", [])}
         self.clock_ports = {p.name: p for p in system.clocks}
         self.peers: dict[str, list[str]] = {}
+        self.sidebands: dict[str, dict] = {}  # sink endpoint -> sideband of its connection
         for c in system.data.get("connections", []):
             self.peers.setdefault(c["from"], []).append(c["to"])
             self.peers.setdefault(c["to"], []).append(c["from"])
+            if c.get("sideband"):
+                self.sidebands[c["to"]] = c["sideband"]
         self.interfaces = {i.endpoint: i for i in system.interfaces}
 
     def block(self, inst: str) -> str | None:
@@ -217,6 +296,7 @@ def plan(system: System) -> Plan:
     axilite: dict[str, tuple[int, int]] = {}  # endpoint -> (VVC index, address width)
     memories: dict[str, int] = {}  # endpoint -> osh_tb_axi_mem instance
     fars: dict[str, int] = {}  # pin endpoint -> far end index
+    axis: dict[str, int] = {}  # stream endpoint -> AXI4-Stream VVC index
     streams = 0
     spfi = 0
 
@@ -254,6 +334,7 @@ def plan(system: System) -> Plan:
                                        ("Valid", "valid"), ("Ready", "ready")) if key in sig]
             out.components.append(Component("osh_tb_axis_master" if master else "osh_tb_axis_slave",
                                             f"i_axis_{streams}", iface.endpoint, gens, ports))
+            axis[iface.endpoint] = streams
             streams += 1
         elif iface.type == "axi4" and iface.role == "master":
             missing = [n for n in AXI_REQUIRED if n not in sig]
@@ -307,7 +388,7 @@ def plan(system: System) -> Plan:
             out.components.append(Component(
                 "osh_tb_spw_far_end", f"i_far_end_{k}", endpoint,
                 [("LinkClkHz_g", hz(link)), ("ClkHz_g", hz(user)),
-                 ("RunDiv_g", str(s.value(inst, "RunDiv_g", 1)))],
+                 ("RunDiv_g", str(s.value(inst, "RunDiv_g", 1))), ("Index_g", str(k))],
                 [("Clk", user), ("LinkClk", link), ("Rst", "osh_rst"),
                  ("Spw_DOut", sig["d_in"].name), ("Spw_SOut", sig["s_in"].name),
                  ("Spw_DIn", sig["d_out"].name), ("Spw_SIn", sig["s_out"].name),
@@ -347,7 +428,8 @@ def plan(system: System) -> Plan:
                 "osh_tb_spfi_far_end", f"i_far_end_{k}", endpoint,
                 [("NumLanes_g", str(width(sig["tx_p"].type))), ("NumVc_g", str(s.value(port, "NumVc_g", 8))),
                  ("VcInDepth_g", str(s.value(port, "VcInDepth_g", 256))), ("RmapVc_g", "-1"),
-                 ("RefClkHz_g", hz(refclk)), ("SysClkHz_g", hz(sys_clk)), ("ModelIdx_g", str(spfi + 1))],
+                 ("RefClkHz_g", hz(refclk)), ("SysClkHz_g", hz(sys_clk)), ("ModelIdx_g", str(spfi + 1)),
+                 ("Index_g", str(k))],
                 [("RefClk", sig["refclk"].name), ("ClkSys", sys_clk), ("Rst", "osh_rst"),
                  ("Gt_TxP", sig["rx_p"].name), ("Gt_TxN", sig["rx_n"].name),
                  ("Gt_RxP", sig["tx_p"].name), ("Gt_RxN", sig["tx_n"].name),
@@ -401,7 +483,175 @@ def plan(system: System) -> Plan:
 
     if reasons:
         raise BenchError(system.entity, reasons)
+    _plan_streams(s, out, axis, axilite, fars)
     return out
+
+
+# The stream checks (docs/design.md, section 6.3): APIDs of the send checks (0x100 + port), of the receive checks
+# (0x200 + port), the User Application value of the packets the far end sends
+SEND_APID = 0x100
+RECEIVE_APID = 0x200
+RECEIVE_UA = 0x5A
+# A message into ocr_framer: one chunk and 259 bytes, so that the last chunk ends in a partial AES block
+CHAIN_EXTRA_BYTES = 259
+# OpenSPP registers (sw/spp_regs.h of OpenSPP v0.1.0) and OpenCrypto registers (sw/ocr_regs.h of OpenCrypto v0.1.0)
+SPP_TX_PACKETS, SPP_RX_PACKETS = 0x080, 0x084
+SPP_ERRORS = [(0x0A0 + 4 * i, f"ERR_TX{i + 1}") for i in range(4)] + \
+    [(0x0B0 + 4 * i, f"ERR_RX{i + 1}") for i in range(6)]
+OCR_ENCRYPTIONS = 0x090
+OCR_ERRORS = [(0x098, "ERR_AUTH"), (0x09C, "ERR_FORMAT"), (0x0A0, "ERR_KEY"), (0x0A4, "ERR_IV_MODE"),
+              (0x0A8, "ERR_IV_EXHAUSTED"), (0x0AC, "ERR_LENGTH"), (0x0B0, "ERR_ECC"), (0x0B4, "ERR_OVERFLOW")]
+SPP = "openspp/spp_core"
+OCR = "opencrypto/ocr_core"
+FRAMER = "opencrypto/ocr_framer"
+OCP = "opencompact/ocp_core"
+
+
+def _defaults(s: _System, spp: str) -> str | None:
+    """Why an spp_core is not in the configuration the stream checks know, or None."""
+    if s.value(spp, "Encapsulation_g", True) is not True:
+        return "its CPTP layer is removed (Encapsulation_g false)"
+    for g in ("TxOctetString_g", "RxOctetString_g"):
+        if str(s.value(spp, g, "(others => '1')")).replace(" ", "") != "(others=>'1')":
+            return f"a port uses the Packet Service ({g})"
+    for g in ("TxPathDefault_g", "RxPathDefault_g"):
+        if s.value(spp, g, True) is not True:
+            return f"its APID paths are disabled after the reset ({g} false)"
+    return None
+
+
+def _spp_link(s: _System, spp: str, fars: dict[str, int]) -> tuple[int, int] | None:
+    """Far end and virtual channel of the link that an spp_core sends on and receives from."""
+    out = s.peer(f"{spp}.M_Link") or ""
+    inst, _, port = out.partition(".")
+    m = re.fullmatch(r"S_Vc\[(\d+)\]", port)
+    if s.block(inst) == OFB and m and s.peer(f"{spp}.S_Link") == f"{inst}.M_Vc[{m.group(1)}]":
+        pa = (s.peer(f"{inst}.Phy") or "").split(".")[0]
+        k = fars.get(f"{pa}.Gt")
+        return None if k is None else (k, int(m.group(1)))
+    if s.block(inst) == NCHAR and port == "S_Link" and s.peer(f"{spp}.S_Link") == f"{inst}.M_Link":
+        nxt = s.peer(f"{inst}.M_NChar") or ""
+        owr, _, oport = nxt.partition(".")
+        if s.block(owr) == OMAP and oport == "S_User":
+            nxt = s.peer(f"{owr}.M_Pkt") or ""
+            owr, _, oport = nxt.partition(".")
+        if s.block(owr) == OWR and oport == "S_Pkt":
+            k = fars.get(f"{owr}.Spw")
+            return None if k is None else (k, 0)
+    return None
+
+
+def _chain(s: _System, start: str) -> tuple[list[str], str, int] | None:
+    """The instances from a stream input down to an spp_core send port: (instances, spp, send port), or None."""
+    insts = []
+    inst = start
+    for _ in range(4):
+        insts.append(inst)
+        block = s.block(inst)
+        out = {OCP: "Out", FRAMER: "M_Out", OCR: "M_Out"}.get(block)
+        if out is None:
+            return None
+        nxt = s.peer(f"{inst}.{out}") or ""
+        inst, _, port = nxt.partition(".")
+        m = re.fullmatch(r"S_Tx\[(\d+)\]", port)
+        if s.block(inst) == SPP and m:
+            return insts, inst, int(m.group(1))
+    return None
+
+
+def _plan_streams(s: _System, out: Plan, axis: dict[str, int], axilite: dict[str, tuple[int, int]],
+                  fars: dict[str, int]) -> None:
+    """The stream checks of the plan; a stream the checks cannot serve stays idle with a note."""
+    sent: dict[str, int] = {}
+    delivered: dict[str, int] = {}
+    ocrs: list[str] = []
+    for endpoint, idx in axis.items():
+        iface = s.interfaces[endpoint]
+        sig = _signals(iface)
+        m = re.fullmatch(r"(\w+)\.(S_Tx|M_Rx)\[(\d+)\]", endpoint)
+        if m and s.block(m.group(1)) == SPP:
+            spp, kind, port = m.group(1), m.group(2), int(m.group(3))
+            why = _defaults(s, spp)
+            link = _spp_link(s, spp, fars)
+            if why is None and link is None:
+                why = "its link is not one the far ends serve"
+            if why is None and kind == "M_Rx" and port != 0:
+                why = "the default APID paths deliver to receive port 0 only"
+            if why is not None:
+                out.stream_notes.append(f"`{endpoint}` stays idle: {spp} {why}")
+                continue
+            far, vc = link
+            if kind == "S_Tx":
+                send = StreamSend(endpoint, idx, spp, far, vc, SEND_APID + port, width(sig["user"].type),
+                                  width(sig["data"].type))
+                out.sends.append(send)
+                sent[spp] = sent.get(spp, 0) + len(send.lengths)
+            else:
+                rec = StreamReceive(endpoint, idx, spp, far, vc, RECEIVE_APID + port,
+                                    s.vhdl(spp, "Tla_g", 'x"FE"'), RECEIVE_UA, width(sig["user"].type),
+                                    width(sig["data"].type))
+                out.receives.append(rec)
+                delivered[spp] = delivered.get(spp, 0) + len(rec.lengths)
+            continue
+        if iface.role != "sink":
+            out.stream_notes.append(f"`{endpoint}` stays idle: the stream checks serve the ports of OpenSPP and the "
+                                    f"inputs of processing chains towards them")
+            continue
+        chain = _chain(s, iface.instance)
+        if chain is None:
+            out.stream_notes.append(f"`{endpoint}` stays idle: its path to a link is not one the stream checks know")
+            continue
+        insts, spp, port = chain
+        blocks = [s.block(i) for i in insts]
+        framer = next((i for i in insts if s.block(i) == FRAMER), None)
+        ocr = next((i for i in insts if s.block(i) == OCR), None)
+        link = _spp_link(s, spp, fars)
+        sideband = s.sidebands.get(f"{spp}.S_Tx[{port}]", {})
+        why = _defaults(s, spp)
+        if why is None and (framer is None or ocr is None or blocks[-1] != OCR):
+            why = "the chain does not end in ocr_framer and ocr_core with the dense output"
+        if why is None and s.value(ocr, "DenseOutput_g", False) is not True:
+            why = "its ocr_core does not have the dense output"
+        if why is None and f"{ocr}.S_AxiLite" not in axilite:
+            why = f"the register file of {ocr} is not an external port (the test key cannot be loaded)"
+        if why is None and link is None:
+            why = "the link of its spp_core is not one the far ends serve"
+        if why is None and ("apid" not in sideband or sideband.get("nameValid")):
+            why = "the send port of its spp_core has no fixed APID"
+        if why is not None:
+            out.stream_notes.append(f"`{endpoint}` stays idle: {why}")
+            continue
+        far, vc = link
+        chunk = int(s.value(framer, "ChunkBytes_g", 4096))
+        if blocks[0] == OCP:
+            samples = int(s.value(insts[0], "XSize_g", 0)) * int(s.value(insts[0], "YSize_g", 0)) * \
+                int(s.value(insts[0], "ZSize_g", 0))
+            out.chains.append(StreamChain(endpoint, idx, "samples", width(sig["data"].type), spp, far, vc,
+                                          int(sideband["apid"]), ocr, chunk, samples=samples))
+        else:
+            out.chains.append(StreamChain(endpoint, idx, "bytes", width(sig["data"].type), spp, far, vc,
+                                          int(sideband["apid"]), ocr, chunk, message_bytes=chunk + CHAIN_EXTRA_BYTES))
+        if ocr not in ocrs:
+            ocrs.append(ocr)
+            out.key_loads.append(KeyLoad(ocr, axilite[f"{ocr}.S_AxiLite"][0], int(s.value(ocr, "KeyBits_g", 256))))
+    for spp in sorted(set(sent) | set(delivered) | {c.spp for c in out.chains}):
+        clk = s.actual(spp, "Clk")
+        if clk in s.clock_ports and clk not in out.spp_clocks:
+            out.spp_clocks.append(clk)
+        mib = axilite.get(f"{spp}.S_AxiLite")
+        if mib is None:
+            out.stream_notes.append(f"the counters of {spp} are not checked: its register file is not an external "
+                                    f"port")
+            continue
+        chain_packets = None if any(c.spp == spp for c in out.chains) else 0
+        tx = None if chain_packets is None else sent.get(spp, 0)
+        out.counters.append(Counters(spp, mib[0], mib[1], [(SPP_TX_PACKETS, "TX_PACKETS", tx),
+                                                          (SPP_RX_PACKETS, "RX_PACKETS", delivered.get(spp, 0)),
+                                                          *[(a, n, 0) for a, n in SPP_ERRORS]]))
+    for ocr in ocrs:
+        mib = axilite[f"{ocr}.S_AxiLite"]
+        out.counters.append(Counters(ocr, mib[0], mib[1], [(OCR_ENCRYPTIONS, "ENCRYPTIONS", None),
+                                                          *[(a, n, 0) for a, n in OCR_ERRORS]]))
 
 
 def _trace(s: _System, target: str) -> tuple[str, int | None] | None:

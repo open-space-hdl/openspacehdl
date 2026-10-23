@@ -25,7 +25,9 @@
 -- the lines crosswise (Spw_DOut to the system's Spw_DIn and so on). The port starts the link itself
 -- (LinkStart and AutoStart), so the link comes up as soon as the system's port starts or answers.
 -- LinkUp is '1' while the port is in the state Run (PORT_STATUS.LINK_STATE = 5, read from its own
--- register file every 32 cycles of Clk).
+-- register file every 32 cycles of Clk). Packets of other protocols (second character not 0x01) go to
+-- the receive queue Index_g, virtual channel 0, of osh_link (osh_tb_link_pkg); the packets of its send
+-- queue leave between the RMAP packets (Passthrough of OpenRMAP).
 --
 -- Documentation: docs/design.md of openspacehdl, section 6.3
 
@@ -40,6 +42,8 @@ library openwire;
 
 library work;
     use work.osh_tb_pkg.all;
+    use work.osh_tb_link_pkg.all;
+    use work.osh_tb_linkvar_pkg.all;
 
 ---------------------------------------------------------------------------------------------------
 -- Entity
@@ -50,7 +54,9 @@ entity osh_tb_spw_far_end is
         ClkHz_g     : positive;                    -- frequency of Clk, at least 1 MHz
         RunDiv_g    : positive range 1 to 255 := 1; -- bit period in Run (LinkClk cycles), as the system's port
         -- Reply timeout of the RMAP initiator, in microseconds
-        ReplyTimeoutUs_g : positive range 1 to 65535 := 1000
+        ReplyTimeoutUs_g : positive range 1 to 65535 := 1000;
+        -- Queue of the far end in osh_link
+        Index_g          : natural range 0 to 7      := 0
     );
     port (
         Clk      : in    std_logic;  -- packet service and register file
@@ -82,6 +88,15 @@ architecture sim of osh_tb_spw_far_end is
     signal RxLast  : std_logic;
     signal RxValid : std_logic;
     signal RxReady : std_logic;
+
+    -- Packets of other protocols between the initiator and the queues
+    signal URxData  : std_logic_vector(7 downto 0);
+    signal URxLast  : std_logic;
+    signal URxValid : std_logic;
+    signal UTxData  : std_logic_vector(7 downto 0) := (others => '0');
+    signal UTxLast  : std_logic                    := '0';
+    signal UTxValid : std_logic                    := '0';
+    signal UTxReady : std_logic;
 
     -- Register file reads of the link state
     signal ArValid : std_logic := '0';
@@ -150,22 +165,80 @@ begin
     i_initiator : entity work.osh_tb_rmap_initiator
         generic map (
             ClkHz_g          => ClkHz_g,
-            ReplyTimeoutUs_g => ReplyTimeoutUs_g
+            ReplyTimeoutUs_g => ReplyTimeoutUs_g,
+            Passthrough_g    => true
         )
         port map (
-            Clk          => Clk,
-            Rst          => Rst,
-            M_Pkt_TData  => TxData,
-            M_Pkt_TLast  => TxLast,
-            M_Pkt_TValid => TxValid,
-            M_Pkt_TReady => TxReady,
-            S_Pkt_TData  => RxData,
-            S_Pkt_TLast  => RxLast,
-            S_Pkt_TValid => RxValid,
-            S_Pkt_TReady => RxReady,
-            Cmd          => Cmd,
-            Res          => Res
+            Clk           => Clk,
+            Rst           => Rst,
+            M_Pkt_TData   => TxData,
+            M_Pkt_TLast   => TxLast,
+            M_Pkt_TValid  => TxValid,
+            M_Pkt_TReady  => TxReady,
+            S_Pkt_TData   => RxData,
+            S_Pkt_TLast   => RxLast,
+            S_Pkt_TValid  => RxValid,
+            S_Pkt_TReady  => RxReady,
+            M_User_TData  => URxData,
+            M_User_TLast  => URxLast,
+            M_User_TValid => URxValid,
+            M_User_TReady => '1',
+            S_User_TData  => UTxData,
+            S_User_TLast  => UTxLast,
+            S_User_TValid => UTxValid,
+            S_User_TReady => UTxReady,
+            Cmd           => Cmd,
+            Res           => Res
         );
+
+    -- Received packets of other protocols into the receive queue: data characters, then the end of
+    -- packet marker with TLast (TData(0) '0' EOP, '1' EEP)
+    p_user_rx : process is
+        variable Bytes_v : t_osh_byte_array(0 to C_OSH_LINK_MAX_BYTES - 1);
+        variable N_v     : natural := 0;
+    begin
+
+        loop
+            wait until rising_edge(Clk) and URxValid = '1';
+
+            if URxLast = '1' then
+                osh_link.push_rx(Index_g, 0, Bytes_v(0 to N_v - 1), URxData(0) = '1');
+                N_v := 0;
+            elsif N_v < C_OSH_LINK_MAX_BYTES then
+                Bytes_v(N_v) := URxData;
+                N_v          := N_v + 1;
+            end if;
+
+        end loop;
+
+    end process;
+
+    -- Packets of the send queue: data characters, then the EOP marker
+    p_user_tx : process is
+    begin
+
+        loop
+            wait until rising_edge(Clk) and Rst = '0' and osh_link.tx_count(Index_g, 0) > 0;
+
+            for I in 0 to osh_link.tx_length(Index_g, 0) loop
+                UTxData  <= x"00";
+                UTxLast  <= '1';
+
+                if I < osh_link.tx_length(Index_g, 0) then
+                    UTxData <= osh_link.tx_byte(Index_g, 0, I);
+                    UTxLast <= '0';
+                end if;
+
+                UTxValid <= '1';
+                wait until rising_edge(Clk) and UTxReady = '1';
+            end loop;
+
+            UTxValid <= '0';
+            UTxLast  <= '0';
+            osh_link.pop_tx(Index_g, 0);
+        end loop;
+
+    end process;
 
     -- Link state: PORT_STATUS.LINK_STATE (bits 2:0), 5 = Run
     p_link : process is
