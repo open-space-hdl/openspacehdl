@@ -23,6 +23,13 @@ All notable changes of the package. Versions follow [semantic versioning](https:
   pins other than the lock manifest or an external interface the generated testbench does not support;
   `openspacehdl.jsonschema` validates the schema keywords the Composer uses.
 
+- `openspacehdl new` and `openspacehdl update`: the project of a system with its inputs, the generated harness and
+  its package, the seeds (`README.md`, `sim/run.py`, the testbench) and the manifest of the generated files;
+  `openspacehdl.add_system(vu, project)` and `openspacehdl.guard_ghdl_generics()` for the generated `run.py`.
+- The Composer schemas in the package: `tools/lock.py` writes `system-1.json` and `system-2.json` of the website
+  commit of the lock to `data/schema/` and records their SHA-256 in the manifest; `tools/wheel_check.py` checks
+  them (rule L6).
+
 ### Fixed
 
 - The UVVM snapshot follows the compile order of each component and carries the target-dependent files of the VVC

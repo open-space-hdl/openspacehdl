@@ -1,7 +1,9 @@
 """Tests of tools/lock.py with small Git repositories: gathering, writing, --check, --report, published tags."""
 
+import hashlib
 import json
 import shutil
+import subprocess
 
 import pytest
 import world
@@ -19,6 +21,11 @@ def args(w, *extra, tag="v0.1.1"):
     return world.lock_args(w, *extra, tag=tag)
 
 
+def site_bytes(w, path):
+    return subprocess.run(["git", "-C", str(w["site"]), "show", f"HEAD:{path}"], capture_output=True,
+                          check=True).stdout
+
+
 def test_writes_the_manifest(world):
     tool = load_tool()
     assert tool.main(args(world)) == 0
@@ -34,6 +41,11 @@ def test_writes_the_manifest(world):
     assert cores["opencompact"]["tag"] == "v0.1.1" and cores["openwire"]["tag"] == "v0.1.0"
     assert cores["opencompact"]["models"] == {"ocp_pa": "hdl/ocp_pa/compile_order_sim.txt"}
     assert cores["openwire"]["license"] == "PSI HDL Library License, Version 1.0"
+    assert sorted(m["website"]["schemas"]) == ["system-1.json", "system-2.json"]
+    for name, h in m["website"]["schemas"].items():
+        b = site_bytes(world, f"composer/schema/{name}")
+        assert h == hashlib.sha256(b).hexdigest()
+        assert (world["tmp"] / "schema" / name).read_bytes() == b
 
 
 def test_check_compares_with_the_written_manifest(world, capsys):
@@ -44,6 +56,26 @@ def test_check_compares_with_the_written_manifest(world, capsys):
     f.write_text(f.read_text(encoding="utf-8").replace("0.9.8-beta", "0.9.7-beta"), encoding="utf-8")
     assert tool.main(args(world, "--check")) == 1
     assert "differs" in capsys.readouterr().err
+
+
+def test_check_compares_the_schemas(world, capsys):
+    tool = load_tool()
+    assert tool.main(args(world)) == 0
+    f = world["tmp"] / "schema" / "system-2.json"
+    f.write_bytes(f.read_bytes() + b" ")
+    assert tool.main(args(world, "--check")) == 1
+    assert "schema/system-2.json differs from the inputs" in capsys.readouterr().err
+    f.unlink()
+    assert tool.main(args(world, "--check")) == 1
+    assert "schema/system-2.json differs from the inputs" in capsys.readouterr().err
+
+
+def test_a_website_without_a_schema_is_an_input_error(world, capsys):
+    git(world["site"], "rm", "-q", "composer/schema/system-2.json")
+    git(world["site"], "commit", "-q", "-m", "no schema")
+    assert load_tool().main(args(world)) == 2
+    assert "has no composer/schema/system-2.json" in capsys.readouterr().err
+    assert not (world["tmp"] / "lock.json").exists() and not (world["tmp"] / "schema").exists()
 
 
 def test_a_mismatch_writes_nothing(world, capsys):

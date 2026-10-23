@@ -16,8 +16,10 @@ import VUnit; it works with the VUnit object it is given (VUnit 4.7 and 5.0).
 
 from __future__ import annotations
 
+import json
 import posixpath
 import re
+import sys
 from pathlib import Path
 
 from openspacehdl import lock as _lock
@@ -176,3 +178,120 @@ def add_uvvm(vu) -> dict:
         marks[name] = "uvvm"
         out[name] = lib
     return out
+
+
+def read_compile_order(path: Path) -> tuple[dict[str, str], list[tuple[str, str]]]:
+    """The sources (repository -> commit) and the files (library, path) of a compile order exported by the Composer."""
+    sources, files = {}, []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != "format composer-compile-order 1":
+        raise OshError(f"{path.name} is not a compile order of the Composer (format composer-compile-order 1)")
+    for line in lines[1:]:
+        parts = line.split()
+        if not parts or parts[0].startswith("#"):
+            continue
+        if parts[0] == "source":
+            sources[parts[1]] = parts[3]
+        elif parts[0] == "file":
+            files.append((parts[1], parts[2]))
+    return sources, files
+
+
+def add_system(vu, project):
+    """Adds a project written by openspacehdl new (docs/design.md, section 6): returns the library of the system.
+
+    The libraries and files of the system's compile order (hdl/<system>_compile_order.txt, the file set the Composer
+    exported) come from the snapshots of the package, checked against the lock manifest; the files of a vendor
+    adapter are replaced by its simulation models; the top level and the files of sim/tb/ go into the library of
+    the system. UVVM is added as well (add_uvvm). A library that add_core added before is used as it is.
+    """
+    project = Path(project)
+    manifest = project / ".openspacehdl" / "project.json"
+    if not manifest.is_file():
+        raise OshError(f"{project} is not a project of openspacehdl: .openspacehdl/project.json is missing")
+    entity = json.loads(manifest.read_text(encoding="utf-8"))["system"]
+    order = project / "hdl" / f"{entity}_compile_order.txt"
+    sources, files = read_compile_order(order)
+    inst = installed()
+    lk = inst.lock
+    olo_repo = lk.olo_repository.split("/")[-1]
+    cores = {c.repository.split("/")[-1]: c for c in lk.cores}
+    for repo, commit in sources.items():
+        pinned = lk.olo_commit if repo == olo_repo else cores[repo].commit if repo in cores else None
+        if pinned is None:
+            raise OshError(f"the compile order of {entity} uses {repo}, which this package does not carry")
+        if commit != pinned:
+            raise OshError(f"the compile order of {entity} uses {repo} at {commit[:7]}; this package carries "
+                           f"{pinned[:7]}; export the system again with the Composer of this package version")
+    adapter_dirs = {}
+    for c in lk.cores:
+        for model_list in c.models.values():
+            adapter_dirs[(c.repository.split("/")[-1], posixpath.dirname(model_list) + "/")] = (c, model_list)
+    libs: dict[str, list[tuple[Path, bool]]] = {}
+    placed = set()
+    for lib, path in files:
+        repo, _, rel = path.partition("/")
+        if rel and repo in sources:
+            sid = "olo" if repo == olo_repo else cores[repo].id
+            adapter = next((v for (r, d), v in adapter_dirs.items() if r == repo and rel.startswith(d)), None)
+            if adapter is not None:
+                core, model_list = adapter
+                if model_list not in placed:
+                    placed.add(model_list)
+                    model = read_list(inst.hdl / sid / model_list)
+                    for f in inst.verified(sid, [model_list] + model)[1:]:
+                        libs.setdefault(lib, []).append((f, True))
+                continue
+            libs.setdefault(lib, []).append((inst.verified(sid, [rel])[0], sid == "olo"))
+        else:
+            libs.setdefault(lib, []).append((order.parent / path, False))
+    tb = sorted((project / "sim" / "tb").glob("*.vhd"))
+    libs.setdefault(entity, []).extend((f, True) for f in tb)
+    marks = _marks(vu)
+    existing = _existing(vu)
+    for lib in libs:
+        if lib in marks:
+            continue
+        if lib in existing:
+            if lib == lk.olo_library:
+                raise OpenLogicConflictError(f"the VUnit project already has a library {lib} that openspacehdl did "
+                                             f"not add")
+            raise LibraryConflictError(f"the VUnit project already has a library {lib} that openspacehdl did not "
+                                       f"add")
+    for lib, entries in libs.items():
+        if lib in marks:
+            continue
+        library = vu.add_library(lib, vhdl_standard="2008")
+        for f, relaxed in entries:
+            source = library.add_source_file(str(f), vhdl_standard="2008")
+            if relaxed:
+                source.add_compile_option("ghdl.a_flags", list(RELAXED_GHDL_FLAGS))
+        marks[lib] = "system" if lib == entity else lib
+    add_uvvm(vu)
+    return vu.library(entity)
+
+
+def guard_ghdl_generics() -> None:
+    """Gives every GHDL simulation its own copy of the option ghdl.sim_flags and checks its generics.
+
+    VUnit 5.0 development builds append the generics of a test to the shared list of ghdl.sim_flags in place, so a
+    simulation inherited the generics of the tests started before it. The guard is the one of the regressions of the
+    cores; it is installed once and works with VUnit 4.7 as well."""
+    from vunit.sim_if.ghdl import GHDLInterface
+
+    if getattr(GHDLInterface._get_command, "_openspacehdl_guard", False):
+        return
+    original = GHDLInterface._get_command
+
+    def wrapper(self, config, *args, **kwargs):
+        config.sim_options = {**config.sim_options,
+                              "ghdl.sim_flags": list(config.sim_options.get("ghdl.sim_flags", []))}
+        cmd = original(self, config, *args, **kwargs)
+        generics = [arg for arg in cmd if arg.startswith("-g")]
+        expected = [f"-g{name}={value}" for name, value in config.generics.items()]
+        if generics != expected:
+            sys.exit(f"GHDL command with the generics {generics}, expected {expected}")
+        return cmd
+
+    wrapper._openspacehdl_guard = True
+    GHDLInterface._get_command = wrapper

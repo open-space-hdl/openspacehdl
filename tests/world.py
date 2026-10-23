@@ -27,6 +27,9 @@ RS_GITMODULES = (
     '[submodule "cores/open-logic-ft"]\n\tpath = cores/open-logic-ft\n'
     '\turl = https://github.com/open-space-hdl/open-logic-ft.git\n'
 )
+# The published Composer schemas, as the website carries them in composer/schema/
+SCHEMAS = {n: (ROOT / "tests" / "fixtures" / "composer" / "schema" / n).read_text(encoding="utf-8")
+           for n in ("system-1.json", "system-2.json")}
 # Clones with a bare remote origin next to them, relative to the repos directory
 REMOTES = ("openwire", "opencompact", "open-logic-ft", "open-logic-ft/3rdParty/en_cl_fix", "reference-systems")
 
@@ -93,6 +96,7 @@ def build(tmp_path: Path) -> dict:
             "export const GENERATOR = { name: 'Open Space Composer', version: '0.9.8-beta' };\n",
         "_data/projects.yml": "- name: OpenWire\n  repo: openwire\n  public: true\n  trl: 3\n"
                               "- name: OpenCompact\n  repo: opencompact\n  public: true\n  trl: 3\n",
+        **{f"composer/schema/{n}": text for n, text in SCHEMAS.items()},
     })
     rs = repos / "reference-systems"
     make_repo(rs, {**LICENSES, ".gitmodules": RS_GITMODULES, "tools/composer_ref.txt": web + "\n",

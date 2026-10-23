@@ -94,6 +94,16 @@ def main(argv: list[str] | None = None) -> int:
     p_export.add_argument("--git", action="store_true", help="Git clones with their history, from the bundles")
     p_export.add_argument("--core", action="append", metavar="CORE",
                           help="export only this core and Open Logic FT (repeatable)")
+    p_new = sub.add_parser("new", help="write the project of a system saved by the Composer")
+    p_new.add_argument("system", help="the saved system, <system>.composer.json")
+    p_new.add_argument("dir", nargs="?", help="target directory, new or empty (default: ./<system>)")
+    p_new.add_argument("--hdl", help="directory of the export (default: hdl/ next to the file, or its directory)")
+    p_update = sub.add_parser("update", help="regenerate the generated files of a project")
+    p_update.add_argument("dir", nargs="?", help="the project (default: the current directory)")
+    p_update.add_argument("--from", dest="source", help="a new saved system to copy into the project first")
+    p_update.add_argument("--hdl", help="directory of the export of --from")
+    p_update.add_argument("--dry-run", action="store_true", help="list what update would do, change nothing")
+    p_update.add_argument("--restore", action="store_true", help="write generated files that were deleted")
     args = parser.parse_args(argv)
 
     if args.command == "info":
@@ -104,5 +114,13 @@ def main(argv: list[str] | None = None) -> int:
         from openspacehdl import export
 
         return export.main(args.dir, args.core, args.git)
+    if args.command == "new":
+        from openspacehdl import project
+
+        return project.main_new(args.system, args.dir, args.hdl)
+    if args.command == "update":
+        from openspacehdl import project
+
+        return project.main_update(args.dir, args.source, args.hdl, args.dry_run, args.restore)
     parser.print_help()
     return 0

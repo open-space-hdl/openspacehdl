@@ -26,6 +26,7 @@ wheel_check = load("wheel_check")
 PROJECT = {"tool": {"openspacehdl": {"path-limit": 260, "install-prefix": 120, "pypi-file-limit-mb": 100}}}
 DIST = "openspacehdl-0.1.0.dist-info"
 TEXTS = ["PSI-HDL-1.0.txt", "LGPL-2.1.txt", "Apache-2.0.txt", "MIT-en_cl_fix.md"]
+SCHEMAS = {"system-1.json": b'{"$id": "1"}\n', "system-2.json": b'{"$id": "2"}\n'}
 
 
 def sha(b: bytes) -> str:
@@ -41,9 +42,13 @@ def snapshot_files() -> dict[str, dict[str, bytes]]:
 
 
 def make_wheel(path: Path, *, files=None, lock_files=None, expression="MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0",
-               license_files=None, extra=None, waived=None, with_lock=True, bundles=None) -> Path:
+               license_files=None, extra=None, waived=None, with_lock=True, bundles=None, schemas=None,
+               lock_schemas=None) -> Path:
     files = snapshot_files() if files is None else files
+    schemas = (SCHEMAS if with_lock else {}) if schemas is None else schemas
     lock = {"format": "openspacehdl-lock", "version": 1,
+            "website": {"schemas": lock_schemas if lock_schemas is not None else
+                        {n: sha(b) for n, b in schemas.items()}},
             "files": lock_files if lock_files is not None else
             {d: {p: sha(b) for p, b in e.items()} for d, e in files.items()}}
     if waived:
@@ -64,6 +69,8 @@ def make_wheel(path: Path, *, files=None, lock_files=None, expression="MIT AND L
         for d, entries in files.items():
             for p, b in entries.items():
                 z.writestr(f"openspacehdl/hdl/{d}/{p}", b)
+        for n, b in schemas.items():
+            z.writestr(f"openspacehdl/data/schema/{n}", b)
         z.writestr(f"{DIST}/METADATA", meta)
         for lf in license_files:
             src = ROOT / lf
@@ -103,6 +110,26 @@ def test_l6_a_waived_manifest(tmp_path):
     w = make_wheel(tmp_path / "w.whl", waived=["L2", "L4"])
     assert wheel_check.check(w, PROJECT) == ["L6: the manifest waives L2, L4; such a wheel is never released"]
     assert wheel_check.check(w, PROJECT, allow_waived=True) == []
+
+
+def test_l6_a_changed_and_a_missing_schema(tmp_path):
+    s1 = SCHEMAS["system-1.json"]
+    w = make_wheel(tmp_path / "w.whl", schemas={"system-1.json": s1 + b" "},
+                   lock_schemas={n: sha(b) for n, b in SCHEMAS.items()})
+    assert wheel_check.check(w, PROJECT) == [
+        "L6: openspacehdl/data/schema/system-1.json: the hash differs from the manifest",
+        "L6: openspacehdl/data/schema/system-2.json is missing"]
+
+
+def test_l6_an_extra_schema(tmp_path):
+    w = make_wheel(tmp_path / "w.whl", schemas={**SCHEMAS, "system-3.json": b"{}"},
+                   lock_schemas={n: sha(b) for n, b in SCHEMAS.items()})
+    assert wheel_check.check(w, PROJECT) == ["L6: openspacehdl/data/schema/system-3.json is not in the manifest"]
+
+
+def test_l6_a_manifest_without_schemas(tmp_path):
+    w = make_wheel(tmp_path / "w.whl", schemas={})
+    assert wheel_check.check(w, PROJECT) == ["L6: the manifest lists no Composer schemas"]
 
 
 def test_l7_an_expression_without_apache(tmp_path):

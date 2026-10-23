@@ -56,7 +56,7 @@ at the build of the package and never edited by hand.
 | --- | --- |
 | `format`, `version` | `openspacehdl-lock`, format version 1 |
 | `package` | Version of the package |
-| `website` | Commit of the website repository, the catalog ID of its `assets/composer/catalog.json` and the generator version of its Composer |
+| `website` | Commit of the website repository, the catalog ID of its `assets/composer/catalog.json`, the generator version of its Composer and the SHA-256 of its Composer schemas (`composer/schema/system-1.json`, `system-2.json`) |
 | `referenceSystems` | Release tag of open-space-hdl/reference-systems and its commit |
 | `openLogic` | The one Open Logic FT of this version: tag, commit, library `olo`, the commit of its submodule `3rdParty/en_cl_fix` |
 | `uvvm` | UVVM commit and the components the system testbenches use |
@@ -87,14 +87,16 @@ Example of one entry of `cores[]`:
 `tools/lock.py` writes the manifest from three inputs:
 
 1. the website repository at one commit: the pins of `_composer/catalog/sources.yml` (commit, library, file list,
-   `verified_with`, the Open Logic tag), the catalog ID and the generator version, and the project cards of
-   `_data/projects.yml` (public status, TRL);
+   `verified_with`, the Open Logic tag), the catalog ID and the generator version, the project cards of
+   `_data/projects.yml` (public status, TRL) and the Composer schemas, which the tool also writes to
+   `openspacehdl/data/schema/`;
 2. reference-systems at one release tag: the commits of its submodules in `cores/` and its `tools/composer_ref.txt`
    (the website commit its systems were checked against);
 3. the repositories of the cores and of Open Logic FT: the release tags of the pinned commits, the files of the
    snapshots and their hashes.
 
-The same tool with `--check` regenerates the manifest in memory and compares it with the committed one.
+The same tool with `--check` regenerates the manifest and the schemas in memory and compares them with the committed
+ones.
 
 ### 3.3 Consistency rules
 
@@ -107,7 +109,7 @@ The build of the package stops with an error when one of these rules fails:
 | L3 | There is one Open Logic FT: the tag of the catalog's `olo` source equals the commit of `cores/open-logic-ft` of reference-systems. |
 | L4 | The website commit of the manifest equals `tools/composer_ref.txt` of the reference-systems release. |
 | L5 | A core enters the manifest only when its card on the website is public and it is a source of the catalog. |
-| L6 | The hashes in `files` match the files of the snapshots in the wheel. |
+| L6 | The hashes in `files` match the files of the snapshots in the wheel, the refs in `bundles` those of the Git bundles, and the hashes of `website.schemas` the Composer schemas in `data/schema/`; the wheel has no other files there. |
 | L7 | The licence files of every snapshot repository are in the wheel, listed in `license-files`, and their licence is named in the licence expression of the wheel (section 4.4). |
 | L8 | The longest path in the wheel stays within the path budget of section 4.5. |
 | L9 | The wheel stays below the file size limit of the project on PyPI (section 4.3). |
@@ -329,10 +331,11 @@ the reason, when:
     .openspacehdl/project.json    manifest of the generated files
 ```
 
-The files fall into three classes:
+The files fall into four classes:
 
 | Class | Written by | Changed by `update` |
 | --- | --- | --- |
+| Input | the Composer: the saved file and its export, copied byte for byte | replaced by `update --from` with a new save and its export |
 | Generated | `new` and `update` | yes, unless edited (section 6.4) |
 | Seed | `new` only | never |
 | User | the integrator | never; the package does not know them |
@@ -342,6 +345,12 @@ the guard that gives every GHDL simulation its own `sim_flags`, because VUnit 5.
 generics from one configuration into the next.
 
 ### 6.3 Generated testbench
+
+The generator is built in two steps. The first step generates the harness with the system, a clock per clock port
+(the period derived from the frequency of its clock domain, `1 sec / <Hz>`), the reset from the testbench
+(`osh_reset`, 16 cycles of the slowest clock) and every input of the external interfaces held idle; its smoke test
+resets the system and lets it run on its clocks. The second step adds the bench components and the register checks
+below.
 
 The harness `<system>_th.vhd` instantiates the system and, for every external port of `resolved.ports`:
 
@@ -386,9 +395,13 @@ only through a link (for example the reference system spfi_encrypt) need the far
 
 ### 6.4 update
 
-`.openspacehdl/project.json` records the package version, the lock, the SHA-256 of the saved file and, per generated
-file, its path and the SHA-256 of the text the package wrote. `openspacehdl update [<dir>]` reads the saved file and
-the export again, runs the checks of section 6.1 and regenerates every generated file:
+`.openspacehdl/project.json` records the package version, the lock, the SHA-256 of every input (the saved file and the
+files of its export) and, per generated file, its path and the SHA-256 of the text the package generated last, also
+when that text went to `<file>.new`: taking over `<file>.new` makes the file unchanged for the next `update`. The
+integrator saves a changed system over the project's file and exports into `hdl/`, or hands the new save and its export
+to `openspacehdl update --from <file> [--hdl <dir>]`, which copies them into the project first; an export file of
+before that the new export no longer has is removed when it is unchanged. `openspacehdl update [<dir>]` then reads
+the saved file and the export, runs the checks of section 6.1 and regenerates every generated file:
 
 | State of the file on disk | Action |
 | --- | --- |
@@ -396,6 +409,7 @@ the export again, runs the checks of section 6.1 and regenerates every generated
 | Edited by the integrator | Left as it is; the new text goes to `<file>.new`, and `update` lists the file and exits with status 1. |
 | Deleted | Not written again; `update` lists it. `--restore` writes it. |
 | Not generated any more (an interface removed) | Deleted when unchanged, otherwise left and listed. |
+| A file of the integrator where a new generated file belongs | Left as it is; the new text goes to `<file>.new`, as for an edited file. |
 
 Seed files and user files are never touched. `update --dry-run` lists the actions without writing. Running `update`
 right after `new` changes nothing, and a second `update` after a change of the system changes nothing more.
@@ -426,7 +440,7 @@ Seed:
 ```
 
 The files of the Composer export in `hdl/` keep the header the Composer wrote and are copied byte for byte, because
-`new` and `update` check them against the saved file; the project manifest records them as generated.
+`new` and `update` check them against the saved file; the project manifest records them as inputs.
 
 ## 7. export
 

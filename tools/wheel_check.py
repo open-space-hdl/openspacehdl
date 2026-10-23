@@ -3,8 +3,8 @@
     python tools/wheel_check.py <wheel> [--allow-waived]
 
 - L6: every snapshot file of the manifest is in the wheel below openspacehdl/hdl/ with its SHA-256, every Git bundle
-  below openspacehdl/bundles/ with the refs of the manifest (git bundle list-heads), and the wheel has no other file
-  there;
+  below openspacehdl/bundles/ with the refs of the manifest (git bundle list-heads), every Composer schema of the
+  manifest below openspacehdl/data/schema/ with its SHA-256, and the wheel has no other file there;
 - L7: the licence expression of the wheel names every licence of the snapshots, and its License-File entries list
   every licence text of src/openspacehdl/licenses/, each copied to .dist-info/licenses/;
 - L8: the longest path in the wheel stays within the budget of [tool.openspacehdl] in pyproject.toml;
@@ -33,6 +33,7 @@ import snapshot  # noqa: E402
 LOCK_NAME = "openspacehdl/data/lock.json"
 HDL = "openspacehdl/hdl/"
 BUNDLES = "openspacehdl/bundles/"
+SCHEMA = "openspacehdl/data/schema/"
 
 
 def metadata(z: zipfile.ZipFile) -> tuple[str, list[str], str]:
@@ -74,6 +75,16 @@ def check(wheel: Path, project: dict, allow_waived: bool = False) -> list[str]:
                 except bundles.BundleError as e:
                     out.append(f"L6: {name}: {e}")
         extra = sorted(n for n in names if n.startswith(BUNDLES) and not n.endswith("/") and n not in wanted)
+        out += [f"L6: {n} is not in the manifest" for n in extra]
+        schemas = {f"{SCHEMA}{n}": h for n, h in (lock or {}).get("website", {}).get("schemas", {}).items()}
+        if files and not schemas:
+            out.append("L6: the manifest lists no Composer schemas")
+        for name, h in sorted(schemas.items()):
+            if name not in names:
+                out.append(f"L6: {name} is missing")
+            elif snapshot.sha256(z.read(name)) != h:
+                out.append(f"L6: {name}: the hash differs from the manifest")
+        extra = sorted(n for n in names if n.startswith(SCHEMA) and not n.endswith("/") and n not in schemas)
         out += [f"L6: {n} is not in the manifest" for n in extra]
 
         expression, license_files, dist_info = metadata(z)
