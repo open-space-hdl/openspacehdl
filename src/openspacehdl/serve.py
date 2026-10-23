@@ -82,8 +82,10 @@ def main(port: int = DEFAULT_PORT, browser: bool = True) -> int:
         print(f"openspacehdl: {e}", file=sys.stderr)
         return 1
     url = f"http://{HOST}:{server.server_address[1]}/"
-    print(f"Serving the portal at {url} (Ctrl+C stops).")
-    print(f"The Composer keeps its workspace in the browser storage of {url}; another port starts with an empty one.")
+    # flushed: into a pipe or a log, the lines would otherwise wait in the buffer while the server runs
+    print(f"Serving the portal at {url} (Ctrl+C stops).", flush=True)
+    print(f"The Composer keeps its workspace in the browser storage of {url}; another port starts with an empty one.",
+          flush=True)
     if browser:
         webbrowser.open(url)
     try:

@@ -1,6 +1,9 @@
 """Tests of openspacehdl serve: the server of the portal on 127.0.0.1, its media types and the command line."""
 
+import os
 import socket
+import subprocess
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -120,6 +123,27 @@ def test_main_says_where_the_workspace_lives(monkeypatch, portal, capsys):
     assert "http://127.0.0.1:8765/" in out
     assert "workspace" in out and "another port starts with an empty one" in out
     assert opened == ["http://127.0.0.1:8765/"]
+
+
+def test_the_address_reaches_a_pipe_while_serving(portal):
+    # a log or a pipe gets the address at once, not when the server stops
+    code = ("import sys; from pathlib import Path; from openspacehdl import serve; "
+            "serve.portal_dir = lambda: Path(sys.argv[1]); sys.exit(serve.main(0, False))")
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONUNBUFFERED"}
+    proc = subprocess.Popen([sys.executable, "-c", code, str(portal)], stdout=subprocess.PIPE, text=True, env=env)
+    lines = []
+    reader = threading.Thread(target=lambda: lines.append(proc.stdout.readline()), daemon=True)
+    try:
+        reader.start()
+        reader.join(timeout=30)
+        assert lines and lines[0].startswith("Serving the portal at http://127.0.0.1:")
+        url = lines[0].split(" at ")[1].split(" ")[0]
+        with urllib.request.urlopen(url, timeout=10) as r:
+            assert r.read().decode() == "<p>start</p>"
+    finally:
+        proc.kill()
+        proc.wait(timeout=10)
+        proc.stdout.close()
 
 
 @pytest.mark.parametrize("argv,expected", [
