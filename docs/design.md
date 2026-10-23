@@ -603,8 +603,7 @@ The tests run on Windows and Linux. Phase A is complete when every level passes.
 
 ## 10. Out of phase A
 
-- Builds for FPGA boards: Vivado for the VCK190 (phase B), Libero for a PolarFire board (phase C), the board data and
-  the constraint check of the reference systems.
+- Builds for FPGA boards: Vivado for the VCK190 (phase B, section 10.1), Libero for a PolarFire board (phase C).
 - Simulation of generated projects in xsim or QuestaSim; phase A runs GHDL.
 - The testbenches of the cores and their regression.
 - Resolving a system without the Composer, or a port of the Composer's generator.
@@ -612,8 +611,65 @@ The tests run on Windows and Linux. Phase A is complete when every level passes.
 - An override of the Open Logic rule of `add_core`.
 - `serve` on another address than 127.0.0.1, and any authentication.
 - The move of the tools and the board data of reference-systems into the package; reference-systems becomes their
-  first consumer later.
+  first consumer later. The move starts after the hardware bring-up of the reference systems.
 - Publishing through GitHub Actions with Trusted Publishing; it comes when the repository is public.
+
+### 10.1 Board targets (phase B)
+
+The package carries the board targets; the Composer does not. The Composer file format stays as it is: a saved system
+names no board, and the Composer has no board catalog, no pin assignment and no vendor files.
+
+**Board data.** One directory `openspacehdl/targets/<board>/` per board, taken from the hardware-tested targets of
+reference-systems (today `systems/<system>/targets/vck190/` of each system):
+
+- the part (VCK190: `xcvc1902-vsva2197-2MP-e-S`) and the connector pins;
+- the variants of the transceiver reference clock with their pins and frequencies (VCK190: the Si570 or the 8A34001,
+  at 100 or 156.25 MHz);
+- the fragment of the processing system that every design of the device family needs (Versal: the CIPS block design
+  with the programmable logic clock and its reset);
+- a template of the board top level (reset generator, clock buffers, the CIPS switch `IncludeCips_g` around the top
+  level of the Composer export) and a template of the build script (steps project, rtl, synth, impl and all, the
+  check of constraints that do not apply, the results directory).
+
+The GT wizard Tcl of a transceiver adapter stays with its core (`hdl/ofb_pa_gty/tcl/ofb_gtw.tcl` of OpenFibre): the
+build script calls it from the OpenFibre snapshot of the package. Today every target of reference-systems repeats the
+board data; in the package it exists once per board. The board data carries the licence of its source in
+reference-systems, the PSI HDL Library License 1.0, which rule L7 checks like the snapshots.
+
+**Command.** `openspacehdl new <system>.composer.json [<dir>] --target <board>` writes the project of section 6.2 and
+the directory `build/<board>/`:
+
+- generated: the board top level and the build script, from the board data, the Composer export and the clock
+  domains of the saved file;
+- seed: the assignment of the external interfaces of the system to the connectors of the board, for example the lanes
+  of `spfi.serial` to a QSFP cage and `spw.ds` to an FMC connector. The integrator checks and edits it; `update`
+  never changes it and regenerates the generated files from it.
+
+The project manifest records the target. `new` and `update` refuse, with every reason and before writing anything, an
+assignment the board cannot carry: an interface type for which the board has no connector, more lanes than the
+connector has, more interfaces on a connector than it has room for, an interface without a connector or a connector
+the board does not have.
+
+**Source and maintenance.** Until the move of the reference-systems tools, the package takes the board data from the
+reference-systems release that the lock pins (`referenceSystems`, section 3.1). After the move the board data lives in
+the package and is maintained there; reference-systems consumes the package, and its targets become projects of
+`openspacehdl new --target` with the seed assignment committed. A new board is brought up in reference-systems first,
+and its board data then goes into the package.
+
+**Evidence.** pytest for the generated files, the seed assignment, the refusals and the update rules, each proven by a
+mutation. On a host with Vivado, the build script runs the steps project and rtl in batch for every system with the
+board, and the generated targets of the reference systems give the same part, pins and constraints as their
+hand-written targets in reference-systems. Synthesis, implementation and the hardware tests run on the build host, as
+reference-systems runs them today.
+
+**Steps of phase B.**
+
+1. The board data of the VCK190 in the package, from the reference-systems release of the lock.
+2. `new --target` and `update` for `build/<board>/`, the seed assignment and its checks.
+3. The Vivado batch evidence and the comparison with the targets of reference-systems.
+4. The move of the reference-systems tools and board data into the package, after the hardware bring-up.
+
+Libero and a PolarFire board form a second board family (phase C).
 
 ## 11. Open points
 
@@ -626,3 +682,4 @@ The tests run on Windows and Linux. Phase A is complete when every level passes.
 | O5 | The documentation sites are built at the tags of the cores, with their own MkDocs toolchains. | Decided: every site is built in its own environment with the pinned requirements of `tools/docs` of the core at its tag. |
 | O6 | Linux tests while the repository is private and has no CI. | Decided: they run locally in WSL until the CI exists. |
 | O7 | The website repository has no licence file, so the licence of the website content and of the Composer in the portal is not stated. | Decided: MIT for the code, CC BY 4.0 for the texts and images; logo, favicon and touch icon stay all rights reserved; third-party fonts and assets keep their licences (section 4.4). The portal enters the wheel once the website repository carries the licence files. |
+| O8 | Where the board data of a build target lives: in the Composer file and its catalog, or in the package. | Decided: in the package (section 10.1); the Composer file format is unchanged, and `new --target <board>` writes `build/<board>/` with a seed assignment of the interfaces to the connectors. |
