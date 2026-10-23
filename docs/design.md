@@ -289,7 +289,8 @@ vu.main()
   components of `osh_tb`; and the harness and testbench of the project. The Open Logic and library rules of `add_core`
   apply.
 - The calls work with VUnit 4.7.1 from PyPI and with VUnit 5.0. VUnit is the optional dependency
-  `openspacehdl[vunit]`.
+  `openspacehdl[vunit]`, `vunit_hdl>=4.7.1,<5.1`: a release of the 5.0 development line comes with an explicit pin
+  (`vunit_hdl==5.0.0.dev7`), because pip takes a development release only when it is named.
 
 ### 5.3 Errors
 
