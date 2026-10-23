@@ -50,6 +50,11 @@ All notable changes of the package. Versions follow [semantic versioning](https:
   map (rule L7); `data/portal.json` lists every file with its hash and licence, and the wheel check compares the wheel
   with it. The licence expression gains `CC-BY-4.0`, `OFL-1.1` and `LicenseRef-OpenSpaceHDL-Logo`.
 
+### Changed
+
+- Composer generator 0.9.9-beta (website 8fa23f0) is a tested generator: `new` reads its files without the warning
+  of an untested generator version.
+
 ### Fixed
 
 - The UVVM snapshot follows the compile order of each component and carries the target-dependent files of the VVC

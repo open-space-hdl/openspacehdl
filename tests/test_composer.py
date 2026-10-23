@@ -65,7 +65,7 @@ def reasons(path, **kw):
 
 def test_the_example_is_accepted():
     s = load()
-    assert s.entity == "spw_rmap_node" and s.layout == 1 and s.generator == "0.9.8-beta"
+    assert s.entity == "spw_rmap_node" and s.layout == 1 and s.generator == "0.9.9-beta"
     assert s.hdl == EXAMPLE.parent / "hdl" and s.warnings == ()
     assert len(s.clocks) == 2 and len(s.resets) == 1
     found = {(i.endpoint, i.type, i.role) for i in s.interfaces}
@@ -131,9 +131,9 @@ def test_a_file_without_resolved_version_has_layout_1(tmp_path):
 
 
 def test_an_untested_generator_is_a_warning(tmp_path):
-    s = load(variant(tmp_path, lambda d: d["generator"].update(version="0.9.9-beta")))
-    assert s.warnings == ("the file was written by Composer generator 0.9.9-beta; this package was tested with "
-                          "0.9.7-beta, 0.9.8-beta",)
+    s = load(variant(tmp_path, lambda d: d["generator"].update(version="0.9.10-beta")))
+    assert s.warnings == ("the file was written by Composer generator 0.9.10-beta; this package was tested with "
+                          "0.9.7-beta, 0.9.8-beta, 0.9.9-beta",)
 
 
 def test_no_export(tmp_path):
