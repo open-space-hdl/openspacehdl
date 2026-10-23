@@ -1,8 +1,9 @@
 """Runs the quality gates of the repository and judges each by its exit status only.
 
     python tools/check.py [--site <website clone>] [--no-markdownlint]
-    python tools/check.py --real-build --site <website clone> --refsys <reference-systems clone> --refsys-tag <tag>
-                          --repos <dir> [--uvvm <clone>] [--waive <rule> ...] [--python <version>=<interpreter> ...]
+    python tools/check.py --real-build --site <website clone> [--site-commit <rev>] --refsys <reference-systems clone>
+                          --refsys-tag <tag> --repos <dir> [--uvvm <clone>] [--waive <rule> ...]
+                          [--python <version>=<interpreter> ...]
                           [--deep <dir> --deep-python <python> --vunit-install "<pip arguments>" ...]
 
 Gates, in this order; the first one that fails stops the run with exit status 1:
@@ -14,10 +15,12 @@ Gates, in this order; the first one that fails stops the run with exit status 1:
 4. with --site: tools/family_data.py --check against origin/main of the website.
 
 --real-build runs the build of a wheel with content instead, on demand: in a copy of HEAD below build/real-build/, it
-writes the lock manifest (tools/lock.py), the snapshots (tools/snapshot.py) and the portal (tools/portal.py, which
-needs Ruby with Bundler and the Python versions of the documentation sites; --python names an interpreter), builds
-the wheel (python -m build) and checks it (tools/wheel_check.py). --waive passes rules to waive to the lock and
-allows the waived manifest in the later steps; such a wheel is evidence of the build only and is never released.
+writes the lock manifest (tools/lock.py, at the website revision --site-commit, by default origin/main; a release
+names the commit of tools/composer_ref.txt of its reference-systems tag, rule L4), the snapshots (tools/snapshot.py)
+and the portal (tools/portal.py, which needs Ruby with Bundler and the Python versions of the documentation sites;
+--python names an interpreter), builds the wheel (python -m build) and checks it (tools/wheel_check.py). --waive
+passes rules to waive to the lock and allows the waived manifest in the later steps; such a wheel is evidence of the
+build only and is never released.
 
 --deep adds the deep install test (docs/design.md, section 9): a virtual environment of --deep-python below <dir>
 whose site-packages path is exactly as long as the install prefix of [tool.openspacehdl] (120 characters), the wheel
@@ -160,6 +163,23 @@ def deep_install(args, wheel: Path, project: dict) -> int:
     return 0
 
 
+def build_steps(args, py: str) -> list[tuple[str, list[str]]]:
+    """The steps of the real build after the copy of HEAD: (name, command), run in the copy."""
+    waive = [x for w in args.waive for x in ("--waive", w)]
+    allow = ["--allow-waived"] if args.waive else []
+    uvvm = ["--uvvm", str(args.uvvm)] if args.uvvm else []
+    site_commit = ["--site-commit", args.site_commit] if args.site_commit else []
+    pythons = [x for p in args.python for x in ("--python", p)]
+    return [
+        ("lock", [py, "tools/lock.py", "--site", str(args.site), *site_commit, "--refsys", str(args.refsys),
+                  "--refsys-tag", args.refsys_tag, "--repos", str(args.repos), *uvvm, *waive]),
+        ("snapshot", [py, "tools/snapshot.py", "--repos", str(args.repos), "--refsys", str(args.refsys), *uvvm,
+                      *allow]),
+        ("portal", [py, "tools/portal.py", "--site", str(args.site), "--repos", str(args.repos), *pythons, *allow]),
+        ("wheel", [py, "-m", "build", "--wheel", "--outdir", "dist"]),
+    ]
+
+
 def real_build(args) -> int:
     missing = [o for o in ("site", "refsys", "refsys_tag", "repos") if getattr(args, o) is None]
     if missing:
@@ -177,19 +197,8 @@ def real_build(args) -> int:
             tar.extractall(dest)
     print(f"ok   copy of HEAD in {dest}")
     py = sys.executable
-    waive = [x for w in args.waive for x in ("--waive", w)]
     allow = ["--allow-waived"] if args.waive else []
-    uvvm = ["--uvvm", str(args.uvvm)] if args.uvvm else []
-    pythons = [x for p in args.python for x in ("--python", p)]
-    steps = [
-        ("lock", [py, "tools/lock.py", "--site", str(args.site), "--refsys", str(args.refsys), "--refsys-tag",
-                  args.refsys_tag, "--repos", str(args.repos), *uvvm, *waive]),
-        ("snapshot", [py, "tools/snapshot.py", "--repos", str(args.repos), "--refsys", str(args.refsys), *uvvm,
-                      *allow]),
-        ("portal", [py, "tools/portal.py", "--site", str(args.site), "--repos", str(args.repos), *pythons, *allow]),
-        ("wheel", [py, "-m", "build", "--wheel", "--outdir", "dist"]),
-    ]
-    for name, cmd in steps:
+    for name, cmd in build_steps(args, py):
         r = subprocess.run(cmd, cwd=dest, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if r.returncode != 0:
             print(f"FAIL {name} (exit status {r.returncode}): {' '.join(cmd)}")
@@ -220,6 +229,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--site", type=Path, help="clone of the website repository, for the family data check")
     parser.add_argument("--no-markdownlint", action="store_true", help="skip markdownlint")
     parser.add_argument("--real-build", action="store_true", help="build and check a wheel with content")
+    parser.add_argument("--site-commit", help="revision of the website for the lock (--real-build; default as "
+                                              "tools/lock.py: origin/main)")
     parser.add_argument("--refsys", type=Path, help="clone of reference-systems (--real-build)")
     parser.add_argument("--refsys-tag", help="release tag of reference-systems (--real-build)")
     parser.add_argument("--repos", type=Path, help="directory with the clones of the repositories (--real-build)")
