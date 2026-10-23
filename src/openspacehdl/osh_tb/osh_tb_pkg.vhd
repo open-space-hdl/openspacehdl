@@ -333,8 +333,10 @@ package body osh_tb_pkg is
     begin
         report_alert_counters(FINAL);
 
-        -- UVVM updates its end status (shared_uvvm_status) only when an alert occurs, so an expected alert
-        -- that never came would pass unnoticed: the counters are compared here
+        -- The end status of UVVM (shared_uvvm_status) is not used: a test end that signals a mismatch with
+        -- alert(TB_ERROR) cannot stop a test that raised the TB_ERROR stop limit (a negative test with
+        -- increment_expected_alerts_and_stop_limit), and VUnit then passes it. The counters are compared here,
+        -- and a mismatch ends the simulation with severity failure.
         for L in WARNING to TB_FAILURE loop
 
             if L /= MANUAL_CHECK and get_alert_counter(L, REGARD) /= get_alert_counter(L, EXPECT) then

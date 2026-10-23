@@ -397,9 +397,9 @@ time stamp of the log has more decimals than it shows, which the 156.25 MHz lane
 says nothing about the system). Its first test case `test_smoke` calls
 `osh_smoke_test(osh_rst, AXILITE_VVCT, osh_rmap_cmd, osh_rmap_res, osh_link_up)`, the same call for every system. Its
 test end `osh_test_end` fails on unexpected alerts and on expected alerts that did not occur: it compares the counters
-of every alert level from WARNING to TB_FAILURE itself, because UVVM updates its end status only when an alert
-occurs, and ends a mismatch with an assertion of severity failure, which stops the simulation whatever the stop
-limits of the test.
+of every alert level from WARNING to TB_FAILURE itself and ends a mismatch with an assertion of severity failure. A
+test end that signals a mismatch with `alert(TB_ERROR)` cannot stop a test that raised the TB_ERROR stop limit (a
+negative test with `increment_expected_alerts_and_stop_limit`), and VUnit then passes it.
 
 The smoke test:
 
