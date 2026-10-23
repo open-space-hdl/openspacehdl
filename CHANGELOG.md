@@ -42,6 +42,13 @@ All notable changes of the package. Versions follow [semantic versioning](https:
 - The Composer schemas in the package: `tools/lock.py` writes `system-1.json` and `system-2.json` of the website
   commit of the lock to `data/schema/` and records their SHA-256 in the manifest; `tools/wheel_check.py` checks
   them (rule L6).
+- The portal and `openspacehdl serve [--port <n>] [--no-browser]`: the website with the Composer and the
+  documentation site of every core and of Open Logic FT at the pinned commits, served on 127.0.0.1, port 8765 by
+  default (the Composer workspace belongs to the port). `tools/portal.py` builds it with Jekyll and MkDocs at
+  pinned gem and package versions, drops what the portal does not need, rewrites the links between the sites and
+  checks rule L11 (no request to another origin, the links resolve, the diagrams keep their lightbox) and the licence
+  map (rule L7); `data/portal.json` lists every file with its hash and licence, and the wheel check compares the wheel
+  with it. The licence expression gains `CC-BY-4.0`, `OFL-1.1` and `LicenseRef-OpenSpaceHDL-Logo`.
 
 ### Fixed
 

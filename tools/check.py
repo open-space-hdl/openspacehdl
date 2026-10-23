@@ -2,20 +2,22 @@
 
     python tools/check.py [--site <website clone>] [--no-markdownlint]
     python tools/check.py --real-build --site <website clone> --refsys <reference-systems clone> --refsys-tag <tag>
-                          --repos <dir> [--uvvm <clone>] [--waive <rule> ...]
+                          --repos <dir> [--uvvm <clone>] [--waive <rule> ...] [--python <version>=<interpreter> ...]
                           [--deep <dir> --deep-python <python> --vunit-install "<pip arguments>" ...]
 
 Gates, in this order; the first one that fails stops the run with exit status 1:
 
 1. pytest with the running Python;
 2. markdownlint (npx markdownlint-cli2) over the Markdown files; --no-markdownlint skips it;
-3. no em-dash in a text file of the repository (tracked, or new and not ignored);
+3. no em-dash in a text file of the repository (tracked, or new and not ignored), apart from the verbatim licence
+   texts in src/openspacehdl/licenses/;
 4. with --site: tools/family_data.py --check against origin/main of the website.
 
 --real-build runs the build of a wheel with content instead, on demand: in a copy of HEAD below build/real-build/, it
-writes the lock manifest (tools/lock.py), the snapshots (tools/snapshot.py), builds the wheel (python -m build) and
-checks it (tools/wheel_check.py). --waive passes rules to waive to the lock and allows the waived manifest in the
-later steps; such a wheel is evidence of the build only and is never released.
+writes the lock manifest (tools/lock.py), the snapshots (tools/snapshot.py) and the portal (tools/portal.py, which
+needs Ruby with Bundler and the Python versions of the documentation sites; --python names an interpreter), builds
+the wheel (python -m build) and checks it (tools/wheel_check.py). --waive passes rules to waive to the lock and
+allows the waived manifest in the later steps; such a wheel is evidence of the build only and is never released.
 
 --deep adds the deep install test (docs/design.md, section 9): a virtual environment of --deep-python below <dir>
 whose site-packages path is exactly as long as the install prefix of [tool.openspacehdl] (120 characters), the wheel
@@ -56,7 +58,8 @@ def no_em_dash() -> bool:
     files = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], cwd=ROOT,
                            capture_output=True, check=True).stdout.split(b"\0")
     hits = []
-    for name in filter(None, files):
+    # The licence texts are verbatim copies of third-party files (rule L7 compares them byte for byte)
+    for name in filter(lambda n: n and not n.startswith(b"src/openspacehdl/licenses/"), files):
         try:
             text = (ROOT / name.decode()).read_text(encoding="utf-8")
         except (UnicodeDecodeError, FileNotFoundError):
@@ -177,11 +180,13 @@ def real_build(args) -> int:
     waive = [x for w in args.waive for x in ("--waive", w)]
     allow = ["--allow-waived"] if args.waive else []
     uvvm = ["--uvvm", str(args.uvvm)] if args.uvvm else []
+    pythons = [x for p in args.python for x in ("--python", p)]
     steps = [
         ("lock", [py, "tools/lock.py", "--site", str(args.site), "--refsys", str(args.refsys), "--refsys-tag",
                   args.refsys_tag, "--repos", str(args.repos), *uvvm, *waive]),
         ("snapshot", [py, "tools/snapshot.py", "--repos", str(args.repos), "--refsys", str(args.refsys), *uvvm,
                       *allow]),
+        ("portal", [py, "tools/portal.py", "--site", str(args.site), "--repos", str(args.repos), *pythons, *allow]),
         ("wheel", [py, "-m", "build", "--wheel", "--outdir", "dist"]),
     ]
     for name, cmd in steps:
@@ -221,6 +226,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--uvvm", type=Path, help="clone of UVVM (--real-build)")
     parser.add_argument("--waive", action="append", default=[], metavar="RULE",
                         help="rule the lock may break (--real-build, evidence only)")
+    parser.add_argument("--python", action="append", default=[], metavar="VERSION=INTERPRETER",
+                        help="interpreter of a Python version for the documentation sites of the portal (--real-build)")
     parser.add_argument("--deep", type=Path, help="directory of the deep install test (--real-build)")
     parser.add_argument("--deep-python", type=Path, help="Python of the deep install test")
     parser.add_argument("--vunit-install", action="append", default=[], metavar="ARGS",

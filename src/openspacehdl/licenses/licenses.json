@@ -2,5 +2,15 @@
   "PSI-HDL-1.0.txt": "LicenseRef-PSI-HDL-1.0",
   "LGPL-2.1.txt": "LicenseRef-PSI-HDL-1.0",
   "Apache-2.0.txt": "Apache-2.0",
-  "MIT-en_cl_fix.md": "MIT"
+  "MIT-en_cl_fix.md": "MIT",
+  "MIT-website.txt": "MIT",
+  "CC-BY-4.0.txt": "CC-BY-4.0",
+  "OFL-1.1-Sora.txt": "OFL-1.1",
+  "OFL-1.1-JetBrainsMono.txt": "OFL-1.1",
+  "MIT-mkdocs-material.txt": "MIT",
+  "FontAwesome-Free.txt": "CC-BY-4.0",
+  "Pictogrammers-Free.txt": "Apache-2.0",
+  "MIT-mkdocs-glightbox.txt": "MIT",
+  "MIT-glightbox.md": "MIT",
+  "OpenSpaceHDL-Logo.txt": "LicenseRef-OpenSpaceHDL-Logo"
 }

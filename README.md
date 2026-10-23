@@ -63,6 +63,11 @@ the ID register of every register bank; the stream test sends packets through Op
 checks them at the far ends. `openspacehdl update` regenerates the generated files after a change of the
 system and never overwrites a file the integrator changed.
 
+`openspacehdl serve` serves the website, the Composer and the documentation of every core and of Open Logic FT, at
+the versions the package pins, on `http://127.0.0.1:8765/`, also without network (`--port` chooses another port,
+`--no-browser` does not open the browser). The Composer keeps its workspace in the browser storage of that address:
+on another port, and on openspacehdl.org, it starts with an empty one, and a saved file moves the work.
+
 ## Development
 
 The design of the next phase is in [docs/design.md](docs/design.md).
@@ -87,6 +92,11 @@ a release tag of reference-systems and the clones of the repositories, and stops
 lengths; `tools/wheel_check.py <wheel>` checks a built wheel against the manifest it carries (rules L6 to L9 of
 docs/design.md).
 
+`tools/portal.py` builds the portal into `src/openspacehdl/portal/` (not tracked): the website with Jekyll (Ruby
+with Bundler) and every documentation site with MkDocs in the Python version of its documentation workflow
+(`--python <version>=<interpreter>`), at the gem and package versions of `tools/portal/`; it checks rule L11 and the
+licence map `tools/portal/licences.json`. `--pin` writes those versions afresh.
+
 `python tools/check.py [--site <clone of open-space-hdl.github.io>]` runs the quality gates (pytest, markdownlint,
 no em-dash, family data) and fails on the exit status of the first gate that fails. `python tools/check.py
 --real-build ...` builds and checks a wheel with content from a copy of HEAD, on demand.
@@ -94,4 +104,7 @@ no em-dash, family data) and fails on the exit status of the first gate that fai
 ## Licence
 
 The package is released under the [MIT License](LICENSE). The IP cores of the family have their own licence (PSI HDL
-Library License), stated in each repository.
+Library License), stated in each repository. The portal carries the website (code under MIT, texts and images under
+CC BY 4.0, the Open Space HDL logo with all rights reserved), the fonts under the SIL Open Font License, and the
+documentation sites under the licences of their repositories and of their theme; section 4.4 of
+[docs/design.md](docs/design.md) lists them, and `src/openspacehdl/licenses/` has every licence text.

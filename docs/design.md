@@ -109,11 +109,12 @@ The build of the package stops with an error when one of these rules fails:
 | L3 | There is one Open Logic FT: the tag of the catalog's `olo` source equals the commit of `cores/open-logic-ft` of reference-systems. |
 | L4 | The website commit of the manifest equals `tools/composer_ref.txt` of the reference-systems release. |
 | L5 | A core enters the manifest only when its card on the website is public and it is a source of the catalog. |
-| L6 | The hashes in `files` match the files of the snapshots in the wheel, the refs in `bundles` those of the Git bundles, and the hashes of `website.schemas` the Composer schemas in `data/schema/`; the wheel has no other files there. |
-| L7 | The licence files of every snapshot repository are in the wheel, listed in `license-files`, and their licence is named in the licence expression of the wheel (section 4.4). |
+| L6 | The hashes in `files` match the files of the snapshots in the wheel, the refs in `bundles` those of the Git bundles, the hashes of `website.schemas` the Composer schemas in `data/schema/`, and the hashes of `data/portal.json` the files of the portal; the wheel has no other files there, and a wheel with snapshots has a portal. |
+| L7 | The licence files of every snapshot repository are in the wheel, listed in `license-files`, and their licence is named in the licence expression of the wheel; every file of the portal has a licence in the licence map, which the expression names, and the licence texts of the sites and of their theme packages equal the copies of the package (section 4.4). |
 | L8 | The longest path in the wheel stays within the path budget of section 4.5. |
 | L9 | The wheel stays below the file size limit of the project on PyPI (section 4.3). |
 | L10 | Every core pins the same UVVM commit; it is the UVVM of the manifest. |
+| L11 | No file of the portal loads a resource from another origin (images, scripts, style sheets, fonts, fetches), every link to a path of the portal resolves (in the pages and in the documentation links of the Composer catalog), the website has no path where a documentation site goes, and every documentation site with the glightbox plugin has glightbox anchors (section 8). |
 
 The `verifiedWith` tag of a core may differ from the Open Logic tag of the manifest: the reference systems are
 verified with that tag. `openspacehdl lock` and `add_core` show both.
@@ -132,11 +133,12 @@ openspacehdl/
     export.py, serve.py
     data/lock.json, data/family.json
     data/schema/system-1.json, system-2.json      Composer schemas at the website commit of the lock
+    data/portal.json                    inputs, SHA-256 and licence of every file of the portal (section 8)
     templates/                          templates of the generated project (MIT)
     hdl/<id>/...                        source snapshots of the cores, Open Logic FT and reference-systems
     hdl/uvvm/...                        UVVM components of the system testbenches, with UVVM's licence
     osh_tb/                             bench components of the package (MIT), library osh_tb (section 6.3)
-    portal/                             website, documentation sites, Composer (see 4.3)
+    portal/                             website, documentation sites, Composer (written by tools/portal.py)
     bundles/<repository>.bundle         Git bundles (see 4.3)
 ```
 
@@ -178,13 +180,13 @@ Measured on the pins of website 1b3d619 and reference-systems v0.1.0 (compressed
 | Whole trees without testbenches (for comparison; Open Logic FT alone 24 MB, of which 17.5 MB PNG images of its documentation) | 39 MB | 20 MB |
 | UVVM components (`src/` only) | 2.6 MB | about 0.6 MB (estimate) |
 | Git bundles: each pinned tag with its history (all published branches and tags: 27.3 MB; the tagged commit alone: 20.7 MB) | 26.8 MB | 26.8 MB (already compressed); Open Logic FT 20.2 MB, of which most is the documentation images of the tagged tree; every core 0.45 to 2.1 MB |
-| Website (`_site`) | 4.2 MB | about 1.5 MB (estimate) |
-| Documentation sites (MkDocs): OpenRMAP measured 5.3 MB; Open Logic FT carries the 17.5 MB of images | about 60 MB for all | about 30 MB (estimate) |
+| Portal, measured on website 95282c0 and the catalog pins, after the drops of section 8: the website 4.0 MiB, Open Logic FT 31.8 MiB (17.8 MB PNG images of its documentation), each core 3.0 to 5.5 MiB | 60.6 MiB | 22.6 MiB (Open Logic FT 16.9 MiB) |
 
-The package is one wheel with all of it, about 60 MB at the current pins, so that one file brings everything to a
-machine without network. It is below the default PyPI limit of 100 MB per file and grows by about 5 to 8 MB with
-every new core (sources, bundle, documentation). The build checks the size of the wheel against the file limit of
-the project on PyPI (rule L9); before the wheel reaches it, the limit is raised on request at PyPI.
+The package is one wheel with all of it, about 50 MB at the current pins (the evidence wheel without the portal has
+27.2 MiB), so that one file brings everything to a machine without network. It is below the default PyPI limit of
+100 MB per file and grows by about 5 to 8 MB with every new core (sources, bundle, documentation). The build checks
+the size of the wheel against the file limit of the project on PyPI (rule L9); before the wheel reaches it, the
+limit is raised on request at PyPI.
 
 A bundle without history (only the tagged commit) would save about 6 MB, because the documentation images of Open
 Logic FT are part of the tagged tree itself. The bundles keep the history up to the pinned tag.
@@ -219,21 +221,25 @@ The portal carries content under further licences:
 
 | Portal content | Licence |
 | --- | --- |
-| Code of the website and the Composer | MIT |
-| Texts and images of the website | Creative Commons Attribution 4.0 |
-| Logo, favicon and touch icon of Open Space HDL (on the website and in every documentation site) | All rights reserved; no licence is granted |
+| Code of the website and the Composer, with its catalog, examples and schemas; its style sheets | MIT |
+| Pages of the website (the MIT layouts with the texts) | MIT AND CC-BY-4.0 |
+| Images of the website (`assets/img/`, apart from the logo files) | Creative Commons Attribution 4.0 |
+| Logo, favicon and touch icon of Open Space HDL: on the website `assets/img/logo-horizontal-inverse.svg`, `assets/img/social-preview.png`, `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`; in every documentation site `assets/images/logo.svg`, `assets/images/favicon.svg` | All rights reserved; no licence is granted |
 | Fonts (Sora, JetBrains Mono), each with its licence file | SIL Open Font License 1.1 |
-| Documentation sites of the cores | the licence of the core |
-| Assets of the MkDocs theme and other third-party files | their own licences |
+| Pages, search index and diagrams of a documentation site, its style sheet `brand.css` | the licence of the core |
+| Icons that the theme inlines into every page of a documentation site | Font Awesome Free: CC-BY-4.0 (each icon carries its attribution); Material Design Icons: Apache-2.0 |
+| Scripts and style sheets of the theme (mkdocs-material, with lunr, escape-html and clipboard.js, whose notices are inside the files) and of glightbox | MIT |
 
-For the portal, rule L7 works with a licence map: every file of the portal matches exactly one entry of the map (a
-path pattern and its licence), every licence of the map is named in the expression with its licence or notice file
-in `license-files`, and the build stops when a file matches no entry. The logo files are named with
-`LicenseRef-OpenSpaceHDL-Logo` and a notice file that states the reservation; they are never covered by the CC BY
-entry. With the portal in the wheel the expression becomes, for example,
-`MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0 AND CC-BY-4.0 AND OFL-1.1 AND LicenseRef-OpenSpaceHDL-Logo`, extended
-by the licences the map finds for the theme assets. The Git bundles carry the licence files of their repositories in
-their trees.
+For the portal, rule L7 works with the licence map `tools/portal/licences.json`: its entries are path patterns with
+a licence, in order, and the first pattern that matches a file decides. An entry without a licence matches the places
+of third-party files (`assets/` of a site) after the known ones, so that a new file there stops the build, as a file
+that matches no entry does. Every licence of the map is named in the expression of the wheel, and the licence texts
+of the sources (the website's `LICENSE` and `LICENSE-CONTENT`, the font licences, the licence files of the theme
+packages in the build environment) must equal the copies in `src/openspacehdl/licenses/` byte for byte. The logo
+files have `LicenseRef-OpenSpaceHDL-Logo` and the notice `OpenSpaceHDL-Logo.txt`, which states the reservation; the
+cores carry the logo in their documentation sites as well, and the reservation holds there too. The expression of the
+wheel is `MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0 AND CC-BY-4.0 AND OFL-1.1 AND LicenseRef-OpenSpaceHDL-Logo`.
+The Git bundles carry the licence files of their repositories in their trees.
 
 ### 4.5 Path length
 
@@ -577,24 +583,57 @@ manifest records the refs of every bundle, and the wheel check compares them wit
 standard library's HTTP server and opens the browser:
 
 - it binds to 127.0.0.1 only; phase A has no option for another address;
-- `/` is the website, `/<repository>/` the documentation of each core at its pinned tag, `/composer/` the Composer
-  with the catalog of the lock, so that a file saved there matches the pins of the package;
+- `/` is the website, `/<repository>/` the documentation of each core and of Open Logic FT at its pinned commit,
+  `/composer/` the Composer with the catalog of the lock, so that a file saved there matches the pins of the package;
 - the Composer fetches its catalog and examples by relative URL and needs `http://` rather than `file://`, which is
   why the package serves the files instead of opening them;
-- links to GitHub stay links to GitHub and need network.
+- the default port is 8765. The Composer keeps its workspace in the storage of the browser, which belongs to the
+  address with its port: the same port finds the same workspace again, another port starts with an empty one, and
+  the online Composer has a workspace of its own. Work moves between them as a saved file. `serve` says so when it
+  starts, and refuses a port that is in use;
+- it sends the media types of the portal itself (on Windows the registry can map `.js` to `text/plain`, and a browser
+  does not run a module script of that type) and lists no directories;
+- links to GitHub and to other sites stay links and need network.
 
-The package CI builds the portal from the tagged sources: the website with Jekyll at the website commit of the lock,
-each documentation site with MkDocs from `tools/docs` of the core at its tag.
+`tools/portal.py` builds the portal for the wheel (the step after the snapshots), in clones at the pinned commits
+that check out without line-end conversion, so that every host writes the same files:
+
+- the website with Jekyll and the gem set of GitHub Pages (`tests/jekyll/Gemfile` of the website) at the website
+  commit of the lock, with the gem versions of `tools/portal/Gemfile.lock`;
+- each documentation site with MkDocs from `tools/docs/` of its repository (`tools/ft_docs/` in Open Logic FT) at the
+  pinned commit, with the requirements of the repository and the versions of
+  `tools/portal/constraints/<repository>.txt`, in a virtual environment of the Python version that the documentation
+  workflow of the repository names (3.12 when it names none). The build stops when the constraints do not pin every
+  installed package; `--pin` writes the Gemfile.lock and the constraints from a fresh resolution, for a change of the
+  pins.
+
+Then it drops the source maps, the language files of the search (`assets/javascripts/lunr/`: every site searches in
+English, and the search loads these files only for other languages; they come without licence files) and `CNAME`. It
+rewrites the links between the sites: a link to `https://openspacehdl.org/<path>` that the portal serves becomes
+`/<path>`, a link to `/<path>` outside the portal becomes `https://openspacehdl.org/<path>` (the OpenDMA card,
+whose core is not in the lock), and a link to a missing page of a site of the portal stays and fails rule L11. It
+removes the third-party status badges that two pages of Open Logic FT 4.7.0-ft.8 still load. Rule L11 (section 3.3)
+and the licence map (section 4.4) then check the result, and only a portal that passes replaces
+`openspacehdl/portal/`. `data/portal.json` records the inputs (the website commit, per site its commit, its
+configuration directory, its Python version and the hash of its constraints) and the SHA-256 and licence of every
+file; the wheel check compares the wheel with it (rule L6).
+
+The documentation links of the Composer come from the field `doc` of the catalog. From catalog 75d78f7588f4 (website
+8fa23f0, generator 0.9.9-beta) on they are paths of the site, so they stay in the portal, and rule L11 checks that
+each resolves; the files the Composer saves still name the full address. An older catalog has full addresses, which
+leave the portal; the portal never rewrites the catalog, whose id is the hash of its content. The removal of the
+status badges of Open Logic FT ends once its documentation strips them itself.
 
 ## 9. Test strategy
 
 | Level | What | Simulator or tool |
 | --- | --- | --- |
-| Unit | Lock generation and the rules L1 to L6 with consistent and inconsistent fixture sets; every refusal of section 6.1; the interface type mapping; the update table of section 6.4; `add_core` and its errors against a recording stand-in of the VUnit object; `serve` on an ephemeral port of 127.0.0.1; `export` as a tree and with `--git` | pytest |
+| Unit | Lock generation and the rules L1 to L6 with consistent and inconsistent fixture sets; every refusal of section 6.1; the interface type mapping; the update table of section 6.4; `add_core` and its errors against a recording stand-in of the VUnit object; `serve` on an ephemeral port of 127.0.0.1 with its media types; `export` as a tree and with `--git`; the post-processing of the portal, the checks of L11 and the licence map on small trees, and the portal build with the website and documentation builds replaced by fixture sites | pytest |
 | Mutation | Each refusal and each update rule is proven by a mutation of the package that makes a test fail; a system file with a wrong ID value makes the smoke test fail | pytest, GHDL |
 | Cores | `add_core` of every core, alone and all in one project, compiles in GHDL | GHDL through VUnit |
 | Systems | Every example of the Composer (seven at the website commit of the lock) and the systems of the reference-systems release: `new`, then `python sim/run.py`, the smoke test and the stream test pass; `update` right after `new` changes nothing | GHDL through VUnit |
 | Exports | The exports of the examples come from `tools/composer_hdl.mjs` of the website at the commit of the lock; the CI checks with it that the stored exports are current (exit status 0) | Node.js, CI only |
+| Portal | `tools/portal.py` builds the website and every documentation site at the pins and passes L11 and the licence map; the installed package serves every site with `serve` | Ruby with Bundler, MkDocs |
 | Wheel | Build of wheel and sdist with the rules L7 (licences) and L8 (path budget), `twine check --strict`, install without network into fresh environments on Python 3.10 and 3.14, the commands run | pip, twine |
 | Deep install | On Windows, an install into a virtual environment whose `site-packages` path is 120 characters long; from there `add_core` of every core compiles in GHDL and one system passes its smoke test | pip, GHDL |
 | VUnit versions | The core and system levels with VUnit 4.7.1 and with VUnit 5.0 | VUnit |
@@ -679,7 +718,7 @@ Libero and a PolarFire board form a second board family (phase C).
 | O2 | The first version with content needs a consistent set. With website 3e0f04b and reference-systems v0.1.0, `tools/lock.py --report` finds rule L2 broken for OpenFibre and OpenCompact (catalog v0.1.1, reference-systems v0.1.0) and rule L4 broken (reference-systems v0.1.0 was checked against website f6715ee). | Decided: the first version with content is built on the next reference-systems release that carries the catalog pins. |
 | O3 | `resolved.version` of the Composer is decided but not yet written into saved files. | Decided: the Composer writes it from generator 0.9.8-beta on; the package refuses an unknown version. For files of older generators it validates against the schema and warns on a generator version it was not tested with. |
 | O4 | Which virtual channel of a SpaceFibre link carries the RMAP target. | Decided: traced in the resolved netlist from the target to the port; `new` refuses when it cannot. |
-| O5 | The documentation sites are built at the tags of the cores, with their own MkDocs toolchains. | Decided: every site is built in its own environment with the pinned requirements of `tools/docs` of the core at its tag. |
+| O5 | The documentation sites are built at the tags of the cores, with their own MkDocs toolchains. | Decided: every site is built in its own environment with the requirements of `tools/docs` of the repository at its pin (`tools/ft_docs` in Open Logic FT), the constraints of the package for what they leave open, and the Python version of the documentation workflow of the repository (section 8). |
 | O6 | Linux tests while the repository is private and has no CI. | Decided: they run locally in WSL until the CI exists. |
-| O7 | The website repository has no licence file, so the licence of the website content and of the Composer in the portal is not stated. | Decided: MIT for the code, CC BY 4.0 for the texts and images; logo, favicon and touch icon stay all rights reserved; third-party fonts and assets keep their licences (section 4.4). The portal enters the wheel once the website repository carries the licence files. |
+| O7 | The website repository has no licence file, so the licence of the website content and of the Composer in the portal is not stated. | Decided: MIT for the code, CC BY 4.0 for the texts and images; logo, favicon and touch icon stay all rights reserved; third-party fonts and assets keep their licences (section 4.4). The website carries the licence files since b124129, and the portal is in the wheel. |
 | O8 | Where the board data of a build target lives: in the Composer file and its catalog, or in the package. | Decided: in the package (section 10.1); the Composer file format is unchanged, and `new --target <board>` writes `build/<board>/` with a seed assignment of the interfaces to the connectors. |

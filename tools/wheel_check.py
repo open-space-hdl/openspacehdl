@@ -4,9 +4,11 @@
 
 - L6: every snapshot file of the manifest is in the wheel below openspacehdl/hdl/ with its SHA-256, every Git bundle
   below openspacehdl/bundles/ with the refs of the manifest (git bundle list-heads), every Composer schema of the
-  manifest below openspacehdl/data/schema/ with its SHA-256, and the wheel has no other file there;
-- L7: the licence expression of the wheel names every licence of the snapshots, and its License-File entries list
-  every licence text of src/openspacehdl/licenses/, each copied to .dist-info/licenses/;
+  manifest below openspacehdl/data/schema/ with its SHA-256, every file of the portal manifest (data/portal.json,
+  written by tools/portal.py) below openspacehdl/portal/ with its SHA-256, and the wheel has no other file there; a
+  wheel with snapshots has a portal;
+- L7: the licence expression of the wheel names every licence of the snapshots and of the portal, and its
+  License-File entries list every licence text of src/openspacehdl/licenses/, each copied to .dist-info/licenses/;
 - L8: the longest path in the wheel stays within the budget of [tool.openspacehdl] in pyproject.toml;
 - L9: the wheel stays below the PyPI file limit of [tool.openspacehdl] (pypi-file-limit-mb, in MiB).
 
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import tempfile
 import zipfile
@@ -31,9 +34,11 @@ import bundles  # noqa: E402
 import snapshot  # noqa: E402
 
 LOCK_NAME = "openspacehdl/data/lock.json"
+PORTAL_NAME = "openspacehdl/data/portal.json"
 HDL = "openspacehdl/hdl/"
 BUNDLES = "openspacehdl/bundles/"
 SCHEMA = "openspacehdl/data/schema/"
+PORTAL = "openspacehdl/portal/"
 
 
 def metadata(z: zipfile.ZipFile) -> tuple[str, list[str], str]:
@@ -86,8 +91,23 @@ def check(wheel: Path, project: dict, allow_waived: bool = False) -> list[str]:
                 out.append(f"L6: {name}: the hash differs from the manifest")
         extra = sorted(n for n in names if n.startswith(SCHEMA) and not n.endswith("/") and n not in schemas)
         out += [f"L6: {n} is not in the manifest" for n in extra]
+        portal = json.loads(z.read(PORTAL_NAME)) if PORTAL_NAME in names else None
+        if files and portal is None:
+            out.append(f"L6: the wheel has snapshots but no portal ({PORTAL_NAME})")
+        listed = {f"{PORTAL}{p}": e for p, e in (portal or {}).get("files", {}).items()}
+        for name, e in sorted(listed.items()):
+            if name not in names:
+                out.append(f"L6: {name} is missing")
+            elif snapshot.sha256(z.read(name)) != e["sha256"]:
+                out.append(f"L6: {name}: the hash differs from the portal manifest")
+        extra = sorted(n for n in names if n.startswith(PORTAL) and not n.endswith("/") and n not in listed)
+        out += [f"L6: {n} is not in the portal manifest" for n in extra[:20]]
 
         expression, license_files, dist_info = metadata(z)
+        named = set(re.findall(r"[A-Za-z0-9.\-+]+", expression)) - {"AND", "OR", "WITH"}
+        used = {x for e in listed.values() for x in re.findall(r"[A-Za-z0-9.\-+]+", e["license"])} - {"AND", "OR",
+                                                                                                         "WITH"}
+        out += [f"L7: the licence expression does not name {x}, a licence of the portal" for x in sorted(used - named)]
         try:
             snapshot.check_licenses(files, expression, license_files)
         except snapshot.SnapshotError as e:
