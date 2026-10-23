@@ -1,6 +1,7 @@
 # Composer fixtures
 
-Test data from the website repository open-space-hdl/open-space-hdl.github.io at commit 95282c0:
+Test data from the website repository open-space-hdl/open-space-hdl.github.io at commit 8fa23f0 (Composer
+generator 0.9.9-beta, catalog 75d78f7588f4):
 
 - `schema/system-1.json`, `schema/system-2.json`: the published schemas of the Composer file format
   (`composer/schema/`).

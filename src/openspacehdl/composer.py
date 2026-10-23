@@ -27,7 +27,7 @@ from openspacehdl import jsonschema
 from openspacehdl.errors import OshError
 
 KNOWN_LAYOUTS = (1,)
-TESTED_GENERATORS = ("0.9.7-beta", "0.9.8-beta")
+TESTED_GENERATORS = ("0.9.7-beta", "0.9.8-beta", "0.9.9-beta")
 # (type, role) of the external interfaces the generated testbench supports; every stream type is supported as a
 # sink or a source (docs/design.md, section 6.3)
 BUS_AND_PIN_TYPES = {("axi4lite", "slave"), ("axi4", "master"), ("axi4", "slave"), ("spw.ds", "pins"),
