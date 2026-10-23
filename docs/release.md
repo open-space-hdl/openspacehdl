@@ -21,12 +21,8 @@ section 3). A release branch starts only when:
   `tools/portal/constraints/`. A changed `tests/jekyll/Gemfile` of the website, or a changed requirements file of a
   documentation site, needs a run with `--pin` and a review of its changes in a pull request to `develop`.
 
-Before 0.1.0 two gaps of the tools are closed, each in a pull request to `develop`:
-
-- `tools/check.py --real-build` passes the website commit to `tools/lock.py` (`--site-commit`). Without it the lock
-  takes `origin/main` of the website, and rule L4 fails as soon as the website has moved past the commit of
-  `composer_ref.txt`.
-- `pyproject.toml` declares the optional dependency `vunit` (`openspacehdl[vunit]`, design.md section 5.2).
+Before 0.1.0 one gap of the tools is closed, in a pull request to `develop`: `pyproject.toml` declares the optional
+dependency `vunit` (`openspacehdl[vunit]`, design.md section 5.2).
 
 ## 2. Release branch
 
@@ -46,7 +42,7 @@ and 5.0 where a level uses VUnit:
 | Level | Run | Passes when |
 | --- | --- | --- |
 | Gates | `python tools/check.py --site <website>` on both Python versions | exit status 0: pytest, markdownlint, no em-dash, family data |
-| Wheel | `python tools/check.py --real-build --site <website> --refsys <reference-systems> --refsys-tag <tag> --repos <dir> --python 3.12=<interpreter>`, without `--waive` | lock, snapshots, portal, wheel and wheel check pass (rules L1 to L11); the report records size, file count, longest path and SHA-256 of the wheel |
+| Wheel | `python tools/check.py --real-build --site <website> --site-commit <commit of composer_ref.txt> --refsys <reference-systems> --refsys-tag <tag> --repos <dir> --python 3.12=<interpreter>`, without `--waive` (without `--site-commit` the lock takes `origin/main` of the website, and rule L4 fails once the website has moved past that commit) | lock, snapshots, portal, wheel and wheel check pass (rules L1 to L11); the report records size, file count, longest path and SHA-256 of the wheel |
 | Deep install | the same with `--deep <dir> --deep-python <python> --vunit-install "<VUnit>"`, once per VUnit version | every core of the lock and UVVM compile in GHDL from a `site-packages` path of 120 characters; `export` writes the tree and the Git repositories |
 | Offline install | fresh virtual environments of both Python versions, `pip install --no-index <wheel>` | `openspacehdl --version`, `info` and `lock` exit with 0 and show the lock of the version |
 | Cores | a VUnit project per core with `add_core`, and one with every core | each compiles in GHDL |
@@ -72,7 +68,7 @@ documentation keeps the evidence.
 
 The source distribution of a version with content carries the snapshots, the bundles and the portal like the wheel
 (48.8 MiB at website 8fa23f0 and reference-systems v0.1.0). Whether a release uploads it beside the wheel is open
-point O9 of design.md.
+point O9 of design.md, decided at the first content release.
 
 ## 5. Upload
 

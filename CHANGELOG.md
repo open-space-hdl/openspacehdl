@@ -54,6 +54,8 @@ All notable changes of the package. Versions follow [semantic versioning](https:
 
 ### Changed
 
+- `tools/check.py --real-build --site-commit <rev>` builds the lock at that website revision, as a release needs it
+  for rule L4 (the commit of `tools/composer_ref.txt` of its reference-systems tag); without it, `origin/main`.
 - Composer generator 0.9.9-beta (website 8fa23f0) is a tested generator: `new` reads its files without the warning
   of an untested generator version.
 
