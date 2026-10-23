@@ -30,6 +30,13 @@ from openspacehdl.installed import Installed, installed  # noqa: F401 (installed
 # the cores use them: they declare shared variables of non-protected types. The sources of a core are analysed as
 # strict VHDL-2008. A testbench that uses UVVM also needs -frelaxed at elaboration (VUnit sim option ghdl.elab_flags).
 RELAXED_GHDL_FLAGS = ("-frelaxed", "-Wno-hide", "-Wno-shared")
+# Bench components of the package (docs/design.md, section 6.3) and the cores they instantiate
+OSH_TB_LIBRARY = "osh_tb"
+OSH_TB_DIR = Path(__file__).resolve().parent / "osh_tb"
+OSH_TB_FILES = ("osh_tb_pkg.vhd", "osh_tb_mem_pkg.vhd", "osh_tb_memvar_pkg.vhd", "osh_tb_check_pkg.vhd",
+                "osh_tb_axi_mem.vhd", "osh_tb_axilite_master.vhd", "osh_tb_axis_master.vhd", "osh_tb_axis_slave.vhd",
+                "osh_tb_rmap_initiator.vhd", "osh_tb_spw_far_end.vhd", "osh_tb_spfi_far_end.vhd")
+OSH_TB_CORES = ("openwire", "openrmap", "openspp", "openfibre")
 _MARK = "_openspacehdl_libraries"
 
 
@@ -180,6 +187,32 @@ def add_uvvm(vu) -> dict:
     return out
 
 
+def add_osh_tb(vu):
+    """Adds the bench components of the package (library osh_tb, docs/design.md section 6.3); returns the library.
+
+    The components are UVVM VVC wrappers, the AXI4 memory responder and the SpaceWire and SpaceFibre far ends, which
+    instantiate OpenWire, OpenRMAP, OpenSPP and OpenFibre. UVVM and these cores are added as well (add_uvvm,
+    add_core); a core that add_core or add_system added before is used as it is. GHDL analyses osh_tb with
+    RELAXED_GHDL_FLAGS. Adding it again returns the library.
+    """
+    marks = _marks(vu)
+    if OSH_TB_LIBRARY in marks:
+        return vu.library(OSH_TB_LIBRARY)
+    if OSH_TB_LIBRARY in _existing(vu):
+        raise LibraryConflictError(f"the VUnit project already has a library {OSH_TB_LIBRARY} that openspacehdl did "
+                                   f"not add")
+    add_uvvm(vu)
+    for core in OSH_TB_CORES:
+        add_core(vu, core)
+    files = [OSH_TB_DIR / f for f in OSH_TB_FILES]
+    missing = [f.name for f in files if not f.is_file()]
+    if missing:
+        raise OshError(f"the installation of openspacehdl lacks the bench components {', '.join(missing)}")
+    lib = _add_library(vu, OSH_TB_LIBRARY, files)
+    marks[OSH_TB_LIBRARY] = OSH_TB_LIBRARY
+    return lib
+
+
 def read_compile_order(path: Path) -> tuple[dict[str, str], list[tuple[str, str]]]:
     """The sources (repository -> commit) and the files (library, path) of a compile order exported by the Composer."""
     sources, files = {}, []
@@ -203,7 +236,8 @@ def add_system(vu, project):
     The libraries and files of the system's compile order (hdl/<system>_compile_order.txt, the file set the Composer
     exported) come from the snapshots of the package, checked against the lock manifest; the files of a vendor
     adapter are replaced by its simulation models; the top level and the files of sim/tb/ go into the library of
-    the system. UVVM is added as well (add_uvvm). A library that add_core added before is used as it is.
+    the system. UVVM and the bench components are added as well (add_osh_tb, with the cores the far ends
+    instantiate). A library that add_core added before is used as it is.
     """
     project = Path(project)
     manifest = project / ".openspacehdl" / "project.json"
@@ -267,7 +301,7 @@ def add_system(vu, project):
             if relaxed:
                 source.add_compile_option("ghdl.a_flags", list(RELAXED_GHDL_FLAGS))
         marks[lib] = "system" if lib == entity else lib
-    add_uvvm(vu)
+    add_osh_tb(vu)
     return vu.library(entity)
 
 
