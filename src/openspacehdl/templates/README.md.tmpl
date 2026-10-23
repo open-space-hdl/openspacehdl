@@ -21,6 +21,14 @@ pip install openspacehdl[vunit]
 python sim/run.py -p 2
 ```
 
+## The smoke test
+
+$smoke
+
+The bench components (library `osh_tb` of openspacehdl) are a UVVM VVC at every AXI4-Lite port and stream, an AXI4
+memory responder at every external AXI4 memory interface, and at every link a far end built from the family's own
+cores with an RMAP initiator.
+
 ## After a change of the system
 
 Save the system in the Composer over `$source`, export the HDL into `hdl/`, then:

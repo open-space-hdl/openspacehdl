@@ -1,14 +1,15 @@
 """The generated files of a project: the harness of the system testbench and its package (docs/design.md, 6.3 and 6.5).
 
-This version of the harness instantiates the system with a clock per clock domain (the period derived from the
-frequency of the Composer file), the reset from the testbench and every input of the external interfaces held idle.
-The bench components of the external interfaces (UVVM VVCs, AXI4 memory responder, link far ends) and the register
-checks of the smoke test follow in the next version of the generator.
+The harness instantiates the system with a clock per clock domain (the period derived from the frequency of the
+Composer file), the reset from the testbench and, for every external interface, the bench component of osh_tb that
+the plan of openspacehdl.bench names: UVVM VVCs, the AXI4 memory responder and the far ends of the links. Inputs that
+no component drives are held idle. The package holds the constants, the signals of the far ends and the smoke test.
 """
 
 from __future__ import annotations
 
 from openspacehdl import __version__
+from openspacehdl import bench as _bench
 from openspacehdl.composer import Port, System
 
 LICENSE_NOTICE = (
@@ -44,8 +45,7 @@ def header(comment: str, source: str, lock_line: str, generated: bool) -> str:
     return "\n".join(f"{comment} {line}".rstrip() for line in lines) + "\n"
 
 
-def _ident(text: str) -> str:
-    return "".join(ch if ch.isalnum() else "_" for ch in text).upper()
+_ident = _bench.ident
 
 
 def clocks(system: System) -> list[tuple[Port, str, int]]:
@@ -62,15 +62,81 @@ def _idle(port: Port) -> str:
     return "'0'" if port.type == "std_logic" else "(others => '0')"
 
 
-def harness_package(system: System, head: str) -> str:
+def _hex40(value: int) -> str:
+    return f'x"{value:010X}"'
+
+
+def _smoke_steps(plan: _bench.Plan) -> list[str]:
+    """The statements of osh_smoke_test after the reset."""
+    out: list[str] = []
+    if plan.starts:
+        out += ["",
+                "        -- Links that do not start by themselves: started through the register file of the port,",
+                "        -- as the integrator's software must (OpenWire PORT_CTRL: AUTO_START, DRIVER_EN, RECEIVER_EN)"]
+        for st in plan.starts:
+            out += [f"        axilite_write(axilite, {st.vvc}, to_unsigned(16#{st.addr:X}#, {st.addr_width}), "
+                    f'x"{st.value:08X}",',
+                    f'                      "{st.endpoint}: link start");',
+                    f'        await_completion(axilite, {st.vvc}, 100 us, "{st.endpoint}: link start");']
+    if plan.far_ends:
+        out += ["", "        -- Every far end reports its link up"]
+        out += [f'        osh_await_link_up(up({k}), C_OSH_LINK_TIMEOUT, "{ep}");'
+                for k, ep in enumerate(plan.far_ends)]
+    if plan.checks:
+        out += ["",
+                "        -- The ID register of every register bank; a bank without one: its base answers OKAY (status 0)"]
+    for c in plan.checks:
+        if c.via == "axilite":
+            addr = f"to_unsigned(16#{c.addr:X}#, {c.addr_width})"
+            if c.value is None:
+                out += [f"        axilite_read(axilite, {c.index}, {addr},",
+                        f'                     "{c.bank}: base (no ID register), response OKAY");']
+            else:
+                out += [f"        axilite_check(axilite, {c.index}, {addr}, {c.value},",
+                        f'                      "{c.bank}: ID register");']
+        elif c.value is None:
+            out += [f"        osh_rmap_read(cmd({c.index}), res({c.index}), {c.tla}, {c.key}, {_hex40(c.addr)}, 4, "
+                    f"v_data,",
+                    f'                      "{c.bank} over RMAP: base (no ID register), status 0");']
+        else:
+            out += [f"        osh_rmap_check_word(cmd({c.index}), res({c.index}), {c.tla}, {c.key}, {_hex40(c.addr)}, "
+                    f"{c.value},",
+                    f'                            "{c.bank} over RMAP: ID register");']
+    if plan.memory_checks:
+        out += ["",
+                "        -- The memory of every RMAP target behind a link: 16 bytes from 4 bytes before a 4 KB",
+                "        -- boundary, written and read back with RMAP, the neighbours unchanged (osh_tb_axi_mem)"]
+    for m in plan.memory_checks:
+        out += [f"        osh_rmap_memory_check(cmd({m.far}), res({m.far}), {m.tla}, {m.key}, {_hex40(m.addr)}, "
+                f"{m.mem}, {_bench.MEM_FILL_SEED}, {_bench.MEM_DATA_SEED},",
+                f'                              "{m.space}");']
+    vvcs = sorted({c.index for c in plan.checks if c.via == "axilite"} | {s.vvc for s in plan.starts})
+    if vvcs:
+        out += ["", "        -- The queued AXI4-Lite commands are complete"]
+        out += [f'        await_completion(axilite, {n}, 1 ms, "AXI4-Lite VVC {n}");' for n in vvcs]
+    return out
+
+
+def harness_package(system: System, head: str, plan: _bench.Plan | None = None) -> str:
+    plan = _bench.plan(system) if plan is None else plan
     e = system.entity
-    lines = [head, "library ieee;", "    use ieee.std_logic_1164.all;", "",
-             f"-- Constants of the system {e} for its testbench: the clocks of its clock domains and the reset.",
+    n = len(plan.far_ends)
+    lines = [head, "library ieee;", "    use ieee.std_logic_1164.all;", "    use ieee.numeric_std.all;", "",
+             "library uvvm_util;", "    context uvvm_util.uvvm_util_context;", "",
+             "library uvvm_vvc_framework;", "    use uvvm_vvc_framework.ti_vvc_framework_support_pkg.all;", "",
+             "library bitvis_vip_axilite;", "    context bitvis_vip_axilite.vvc_context;",
+             "    use bitvis_vip_axilite.td_target_support_pkg.all;", "",
+             "library osh_tb;", "    use osh_tb.osh_tb_pkg.all;", "    use osh_tb.osh_tb_check_pkg.all;", "",
+             "-- Constants of the system",
+             f"--   {e}",
+             "-- for its testbench (the clocks of its clock domains, the reset, the far ends of its links), the",
+             "-- signals between the testbench and the harness, and the smoke test.",
              f"package {e}_th_pkg is", ""]
-    cks = clocks(system)
-    for p, name, hz in cks:
-        c = _ident(p.name)
-        lines += [f"    -- {p.name}: clock domain {name}",
+    cks = [(p.name, f"clock domain {name}", hz) for p, name, hz in clocks(system)]
+    cks += [(c.port, c.name, c.hz) for c in plan.clocks]
+    for port, what, hz in cks:
+        c = _ident(port)
+        lines += [f"    -- {port}: {what}",
                   f"    constant C_{c}_HZ     : positive := {hz};",
                   f"    constant C_{c}_PERIOD : time     := 1 sec / C_{c}_HZ;"]
     slowest = min(cks, key=lambda t: t[2])[0] if cks else None
@@ -78,10 +144,29 @@ def harness_package(system: System, head: str) -> str:
               "    -- The reset of the system (high-active) is held for this many cycles of the slowest clock",
               f"    constant C_RESET_CYCLES   : positive := {RESET_CYCLES};",
               f"    constant C_SLOWEST_PERIOD : time     := "
-              f"{'C_' + _ident(slowest.name) + '_PERIOD' if slowest else '10 ns'};", "",
+              f"{'C_' + _ident(slowest) + '_PERIOD' if slowest else '10 ns'};", "",
+              "    -- Far ends of the links of the system and the time each may take to bring its link up",
+              f"    constant C_OSH_FAR_ENDS     : natural := {n};",
+              "    constant C_OSH_LINK_TIMEOUT : time    := 5 ms;", ""]
+    lines += [f"    --   far end {k}: {ep}" for k, ep in enumerate(plan.far_ends)]
+    lines += ["" if plan.far_ends else None,
               "    -- Reset of the system, driven by the testbench with osh_reset",
               "    signal osh_rst : std_logic := '1';", "",
+              "    -- RMAP commands to the far ends (driven by the testbench), their results and link states (driven",
+              "    -- by the far ends in the harness)",
+              "    signal osh_rmap_cmd : t_osh_rmap_cmd_array(0 to C_OSH_FAR_ENDS - 1) := "
+              "(others => C_OSH_RMAP_CMD_IDLE);",
+              "    signal osh_rmap_res : t_osh_rmap_res_array(0 to C_OSH_FAR_ENDS - 1);",
+              "    signal osh_link_up  : std_logic_vector(0 to C_OSH_FAR_ENDS - 1);", "",
               "    procedure osh_reset(signal rst : out std_logic);", "",
+              "    -- Smoke test of the system: reset, the start of the links that do not start by themselves, every",
+              "    -- link up, the ID register of every register bank, the memory of every RMAP target behind a link",
+              "    procedure osh_smoke_test(",
+              "        signal rst     : out   std_logic;",
+              "        signal axilite : inout t_vvc_target_record;",
+              "        signal cmd     : inout t_osh_rmap_cmd_array;",
+              "        signal res     : in    t_osh_rmap_res_array;",
+              "        signal up      : in    std_logic_vector);", "",
               f"end package {e}_th_pkg;", "",
               f"package body {e}_th_pkg is", "",
               "    procedure osh_reset(signal rst : out std_logic) is",
@@ -90,32 +175,66 @@ def harness_package(system: System, head: str) -> str:
               "        wait for C_RESET_CYCLES * C_SLOWEST_PERIOD;",
               "        rst <= '0';",
               "    end procedure;", "",
+              "    procedure osh_smoke_test(",
+              "        signal rst     : out   std_logic;",
+              "        signal axilite : inout t_vvc_target_record;",
+              "        signal cmd     : inout t_osh_rmap_cmd_array;",
+              "        signal res     : in    t_osh_rmap_res_array;",
+              "        signal up      : in    std_logic_vector) is",
+              "        variable v_data : t_osh_byte_array(0 to 3);",
+              "    begin",
+              f'        log(ID_LOG_HDR, "Smoke test of {e}", "osh_smoke_test");',
+              "        osh_reset(rst);",
+              *_smoke_steps(plan),
+              "    end procedure;", "",
               f"end package body {e}_th_pkg;", ""]
-    return "\n".join(lines)
+    return "\n".join(line for line in lines if line is not None)
 
 
-def harness(system: System, head: str) -> str:
+def _component(c: _bench.Component) -> list[str]:
+    gw = max((len(g) for g, _ in c.generics), default=1)
+    pw = max((len(p) for p, _ in c.ports), default=1)
+    lines = [f"    -- {c.endpoint}", f"    {c.label} : entity osh_tb.{c.entity}"]
+    if c.generics:
+        lines += ["        generic map (", ",\n".join(f"            {g.ljust(gw)} => {v}" for g, v in c.generics),
+                  "        )"]
+    lines += ["        port map (", ",\n".join(f"            {p.ljust(pw)} => {a}" for p, a in c.ports), "        );",
+              ""]
+    return lines
+
+
+def harness(system: System, head: str, plan: _bench.Plan | None = None) -> str:
+    plan = _bench.plan(system) if plan is None else plan
     e = system.entity
     ports = system.data["resolved"]["ports"]
+    pin_clocks = {c.port for c in plan.clocks}
     width = max((len(p["name"]) for p in ports), default=1)
     lines = [head, "library ieee;", "    use ieee.std_logic_1164.all;", "",
+             "library uvvm_vvc_framework;", "",
+             "library osh_tb;", "    use osh_tb.osh_tb_pkg.all;", "",
              f"use work.{e}_th_pkg.all;", "",
-             f"-- Harness of the system testbench of {e}: the system with its clocks, its reset and the inputs of its",
-             "-- external interfaces held idle.",
+             "-- Harness of the system testbench of",
+             f"--   {e}",
+             "-- the system with its clocks, its reset and a bench component of osh_tb at every external interface;",
+             "-- inputs that no component drives are held idle.",
              f"entity {e}_th is",
              f"end entity {e}_th;", "",
              f"architecture sim of {e}_th is", ""]
     for p in ports:
-        init = " := '0'" if p["kind"] == "clock" else ""
-        if p["kind"] == "interface" and p["dir"] == "in":
+        init = " := '0'" if p["kind"] == "clock" or p["name"] in pin_clocks else ""
+        if not init and p["kind"] == "interface" and p["dir"] == "in":
             init = f" := {_idle(Port(p['name'], p['dir'], p['type'], p['kind']))}"
         lines.append(f"    signal {p['name'].ljust(width)} : {p['type']}{init};")
     lines += ["", "begin", ""]
     for p in system.resets:
         lines.append(f"    {p.name} <= osh_rst;")
-    for p, _, _ in clocks(system):
-        lines.append(f"    {p.name} <= not {p.name} after C_{_ident(p.name)}_PERIOD / 2;")
+    for name in [p.name for p, _, _ in clocks(system)] + [c.port for c in plan.clocks]:
+        lines.append(f"    {name} <= not {name} after C_{_ident(name)}_PERIOD / 2;")
     lines += ["", f"    i_system : entity work.{e}", "        port map ("]
     maps = [f"            {p['name'].ljust(width)} => {p['name']}" for p in ports]
-    lines += [",\n".join(maps), "        );", "", "end architecture sim;", ""]
+    lines += [",\n".join(maps), "        );", "",
+              "    -- UVVM: the engine of the VVCs", "    i_uvvm : entity uvvm_vvc_framework.ti_uvvm_engine;", ""]
+    for c in plan.components:
+        lines += _component(c)
+    lines += ["end architecture sim;", ""]
     return "\n".join(lines)

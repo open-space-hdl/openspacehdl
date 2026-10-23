@@ -26,6 +26,13 @@ All notable changes of the package. Versions follow [semantic versioning](https:
 - `openspacehdl new` and `openspacehdl update`: the project of a system with its inputs, the generated harness and
   its package, the seeds (`README.md`, `sim/run.py`, the testbench) and the manifest of the generated files;
   `openspacehdl.add_system(vu, project)` and `openspacehdl.guard_ghdl_generics()` for the generated `run.py`.
+- The bench components of the generated testbench, library `osh_tb` (`openspacehdl.add_osh_tb`): UVVM VVC wrappers for
+  AXI4-Lite ports and streams, the AXI4 memory responder `osh_tb_axi_mem` with a backdoor, the RMAP initiator, and
+  the SpaceWire and SpaceFibre far ends built from OpenWire, OpenRMAP, OpenSPP and OpenFibre; unit benches in
+  `tests/hdl/`. The generated harness instantiates them for every external interface, and `test_smoke` starts the
+  links, waits for them, reads the ID register of every register bank (through its port or with RMAP over a link)
+  and checks the memory of every RMAP target behind a link. `new` refuses AXI4 slaves and systems whose testbench
+  it cannot make.
 - The Composer schemas in the package: `tools/lock.py` writes `system-1.json` and `system-2.json` of the website
   commit of the lock to `data/schema/` and records their SHA-256 in the manifest; `tools/wheel_check.py` checks
   them (rule L6).

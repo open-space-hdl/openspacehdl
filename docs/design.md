@@ -135,12 +135,14 @@ openspacehdl/
     templates/                          templates of the generated project (MIT)
     hdl/<id>/...                        source snapshots of the cores, Open Logic FT and reference-systems
     hdl/uvvm/...                        UVVM components of the system testbenches, with UVVM's licence
-    hdl/osh_tb/...                      bench components of the package (MIT)
+    osh_tb/                             bench components of the package (MIT), library osh_tb (section 6.3)
     portal/                             website, documentation sites, Composer (see 4.3)
     bundles/<repository>.bundle         Git bundles (see 4.3)
 ```
 
-The directory of a snapshot is the id of its repository in the lock manifest: `openwire`, `openrmap`, `openspp`,
+The bench components are files of the package in `osh_tb/`, not in `hdl/`: `hdl/` holds only the generated snapshots,
+which `tools/snapshot.py` writes and cleans and rule L6 checks. The directory of a snapshot is the id of its repository
+in the lock manifest: `openwire`, `openrmap`, `openspp`,
 `openfibre`, `opencrypto`, `opencompact`, `olo` for Open Logic FT and `refsys` for reference-systems. The short names
 keep the paths within the budget of section 4.5.
 
@@ -315,7 +317,11 @@ the reason, when:
 - a source of `resolved.compile` has another commit than the manifest. The message names the package version whose
   manifest matches, if one is known, and says that the system can be saved again with the Composer of this package
   version (`openspacehdl serve`);
-- an external interface has a type that the generator has no bench component for (section 6.3).
+- an external interface has a type that the generator has no bench component for, or is an AXI4 slave, which a later
+  version serves with the UVVM AXI4 VVC (section 6.3);
+- the generated testbench cannot serve the system (section 6.3): an RMAP target that is not reached over a link the
+  generator can trace, a link that does not start by itself and whose register file is not an external port, a clock
+  of a far end that is not a clock port of the system.
 
 ### 6.2 Generated project
 
@@ -346,52 +352,87 @@ generics from one configuration into the next.
 
 ### 6.3 Generated testbench
 
-The generator is built in two steps. The first step generates the harness with the system, a clock per clock port
-(the period derived from the frequency of its clock domain, `1 sec / <Hz>`), the reset from the testbench
-(`osh_reset`, 16 cycles of the slowest clock) and every input of the external interfaces held idle; its smoke test
-resets the system and lets it run on its clocks. The second step adds the bench components and the register checks
-below.
+The harness `<system>_th.vhd` instantiates the system, the UVVM engine and, for every external port of
+`resolved.ports`:
 
-The harness `<system>_th.vhd` instantiates the system and, for every external port of `resolved.ports`:
-
-- a clock generator for every port of kind `clock`, with the period derived from `frequencyHz` of its clock domain;
-- the reset for the port of kind `reset` (asynchronous, high-active);
-- a bench component for every external interface, chosen by the interface type. The type comes from
-  `port.interface` through `resolved.instances[].block` to `catalogSubset.blocks[].interfaces[]`:
+- a clock generator for every port of kind `clock`, with the period derived from `frequencyHz` of its clock domain,
+  and for the reference clock pin of a SpaceFibre adapter, with the frequency of the adapter's lane clock;
+- the reset for the port of kind `reset` (asynchronous, high-active), driven by the testbench (`osh_reset`, 16 cycles
+  of the slowest clock);
+- a bench component of the library `osh_tb` for every external interface, chosen by the interface type. The type
+  comes from `port.interface` through `resolved.instances[].block` to `catalogSubset.blocks[].interfaces[]`; the
+  clock of a VVC is the clock port of the system behind the clock of the interface.
 
 | Interface type | Role at the system | Bench component |
 | --- | --- | --- |
-| `axi4lite` | slave | UVVM AXI4-Lite VVC |
-| `axi4` | master | AXI4 memory responder of the package (`osh_tb_axi_mem`); UVVM has no AXI4 slave VVC |
-| `axi4` | slave | UVVM AXI4 VVC |
-| streams (`spp.tx`, `byte.stream`, `c123.samples`, ...) | sink | UVVM AXI4-Stream VVC, transmitter; the signals of the type (data, keep, last, user) mapped, absent optional signals tied to their idle value |
-| streams (`spp.rx`, ...) | source | UVVM AXI4-Stream VVC, receiver |
-| `spw.ds` | pins | SpaceWire far end: an `owr_core` and an `omap_core` with the initiator, the lines joined crosswise |
-| `spfi.serial` | pins | SpaceFibre far end: an `ofb_core` with `ofb_pa_gty` (architecture `mdl` in GHDL) and an `omap_core` with the initiator, with the lane count and virtual channels of the system's port, lane i to lane i |
+| `axi4lite` | slave | `osh_tb_axilite_master`: the UVVM AXI4-Lite VVC (32-bit data) |
+| `axi4` | master | `osh_tb_axi_mem`: the AXI4 memory responder of the package (16 KiB from address 0, initial data `osh_mem_byte(address, 1)`) |
+| `axi4` | slave | refused in this version; a later version adds the UVVM AXI4 VVC |
+| streams (`spp.tx`, `byte.stream`, `c123.samples`, ...) | sink | `osh_tb_axis_master`: the UVVM AXI4-Stream VVC, transmitter; data of a width that is not a multiple of 8 is padded to whole bytes, which the UVVM BFM needs |
+| streams (`spp.rx`, ...) | source | `osh_tb_axis_slave`: the UVVM AXI4-Stream VVC, receiver |
+| `spw.ds` | pins | `osh_tb_spw_far_end`: an `owr_core` and an RMAP initiator, the lines joined crosswise |
+| `spfi.serial` | pins | `osh_tb_spfi_far_end`: an `ofb_core` with `ofb_pa_gty` (architecture `mdl` in GHDL, control record 1 + k of the model for far end k) and an RMAP initiator through an `spp_nchar` on the virtual channel of the system's RMAP target, with the lane count and the virtual channels of the system's port, lane i to lane i |
 
-The far ends are bench components of the package (library `osh_tb`), built from the family's own cores as a second
-port at the other end of the link; the SpaceFibre far end follows the far end of the reference systems.
+Inputs that no component drives are held idle.
 
-The harness package `<system>_th_pkg.vhd` holds the constants of the system (clock periods, register banks with base,
-size and ID value, the links and the RMAP target behind each) and the procedures `osh_smoke_test`,
-`osh_read_register` and `osh_rmap_read`. The seed testbench `<system>_tb.vhd` is a VUnit runner with UVVM; its first
-test case `test_smoke` calls `osh_smoke_test`, and its test end fails on unexpected alerts and on missing expected
-alerts, as in the benches of the cores.
+The far ends are the second port at the other end of a link, built from the family's own cores; the SpaceFibre far
+end follows the far end of the reference systems. Each starts its link itself (LinkStart and AutoStart, LaneStart and
+AutoStart) and reports `LinkUp` from its own register file (OpenWire `PORT_STATUS.LINK_STATE` = Run, OpenFibre
+`DL_STATUS.LINK_STATE` = Link Initialised). Its RMAP initiator `osh_tb_rmap_initiator` is an `omap_core` with the
+Initiator only (one outstanding command, reply timeout 1 ms); the testbench sends it commands through the records of
+`osh_tb_pkg` (`osh_rmap_read`, `osh_rmap_write`, `osh_rmap_check_word`). The generator traces the link of an RMAP
+target through `connections`: the target's `S_Pkt` directly on `M_Pkt` of an `owr_core`, or on an `spp_nchar` whose
+`S_Link` comes from `M_Vc[k]` of an `ofb_core` whose `Phy` goes to an `ofb_pa_gty` with external pins (virtual
+channel k). In every Composer example and reference system with a SpaceFibre link the target is on virtual channel 0.
+
+`add_system` adds `osh_tb` (`openspacehdl.add_osh_tb`) and with it UVVM and the cores the far ends instantiate
+(OpenWire, OpenRMAP, OpenSPP and OpenFibre with the model of its adapter), also when the system does not use them.
+
+The harness package `<system>_th_pkg.vhd` holds the constants of the system (clock periods, the number of far ends and
+the time each may take for its link), the signals between the testbench and the harness (`osh_rst`; per far end the
+RMAP command and result and the link state: `osh_rmap_cmd`, `osh_rmap_res`, `osh_link_up`) and the procedures
+`osh_reset` and `osh_smoke_test`. The seed testbench `<system>_tb.vhd` is a VUnit runner with UVVM. It starts with
+`osh_test_start` (the UVVM engine ready, the log of positive checks off, and off the warning UVVM raises once when a
+time stamp of the log has more decimals than it shows, which the 156.25 MHz lane clock of SpaceFibre causes and which
+says nothing about the system). Its first test case `test_smoke` calls
+`osh_smoke_test(osh_rst, AXILITE_VVCT, osh_rmap_cmd, osh_rmap_res, osh_link_up)`, the same call for every system. Its
+test end `osh_test_end` fails on unexpected alerts and on expected alerts that did not occur: it compares the counters
+of every alert level from WARNING to TB_FAILURE itself, because UVVM updates its end status only when an alert
+occurs, and ends a mismatch with an assertion of severity failure, which stops the simulation whatever the stop
+limits of the test.
 
 The smoke test:
 
-1. starts the clocks, holds the reset for 16 cycles of the slowest clock and releases it;
-2. waits until every far end reports its link up (SpaceWire state Run, SpaceFibre link initialised), with a timeout;
-3. reads the ID register of every register bank of the address map (offset and value from
+1. holds the reset for 16 cycles of the slowest clock and releases it;
+2. starts the links that do not start by themselves. An OpenWire port whose `LinkStart_g` and `AutoStart_g` are false
+   (every SpaceWire example of the Composer) gets `PORT_CTRL` = AutoStart, driver and receiver enabled through its
+   register file: the programming sequence of OpenWire, which the software of the system must follow as well; the
+   README of such a project says so. `new` refuses a port that does not start and whose register file is not an
+   external port, and a SpaceFibre port with `LaneStart_g` and `AutoStart_g` false;
+3. waits until every far end reports its link up, with a timeout of 5 ms;
+4. reads the ID register of every register bank of the address map (offset and value from
    `catalogSubset.blocks[].idRegister` and `resolved.addressMap`) and compares it with the expected value:
    - a bank in an address space of kind `port` through the AXI4-Lite VVC of that port;
    - a bank behind an RMAP target (an address space of kind `master` at the target's memory interface) with an RMAP
-     read command from the far end of the link that carries the target;
-   - a bank without an ID register with a read of its base address that must complete with an OKAY response;
-4. checks that no alert was raised.
+     read from the far end of the link that carries the target (Target Logical Address `La0_g` and key `Key_g` of the
+     target);
+   - a bank without an ID register with a read of its base address that must answer OKAY (with RMAP: status 0);
+5. for every RMAP target whose memory interface is external (`osh_tb_axi_mem`): writes 16 bytes with RMAP from 4 bytes
+   before a 4 KB boundary (address 0x0FFC) over memory filled with `osh_mem_byte(address, 1)`; the values,
+   `osh_mem_byte(address, 2)`, depend on every address bit. It reads them back with RMAP and checks through the
+   backdoor of the memory responder that the window holds them and the 16 bytes on each side are unchanged. The
+   target has to split its burst at the boundary;
+6. waits for the completion of the AXI4-Lite commands; the test end then fails on any alert.
 
-Every Composer example has register banks, so step 3 never runs empty for them. Systems whose banks are reachable
-only through a link (for example the reference system spfi_encrypt) need the far end with the RMAP initiator.
+The examples have register banks behind their ports; the reference systems reach theirs only over the SpaceFibre link,
+so step 4 runs with RMAP there. The four examples whose RMAP target has an external memory get step 5, so that the far
+end and its initiator are exercised beyond the link start in every system with a target.
+
+The bench components have unit benches of their own (`tests/hdl/`, VUnit and UVVM in GHDL, run by
+`tests/test_osh_tb_hdl.py` with `OPENSPACEHDL_HDL_TESTS=1` on an installation with snapshots): the memory responder with
+every burst type and the alerts of the AXI4 rules, the initiator against an `omap_core` target, each far end against a
+second port in the place of the system; each with negative tests (a wrong key gives the status "invalid key", a dead
+link the timeout), so that the smoke test cannot pass with a far end that never answers.
 
 ### 6.4 update
 
