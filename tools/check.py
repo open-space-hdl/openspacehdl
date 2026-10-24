@@ -47,13 +47,15 @@ ROOT = Path(__file__).resolve().parent.parent
 EM_DASH = chr(0x2014)
 
 
-def run(name: str, cmd: list[str]) -> bool:
+def run(name: str, cmd: list[str], summary: bool = False) -> bool:
+    """Runs one gate; summary: on success, also print the last line of its output (the counts of pytest)."""
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         print(f"FAIL {name} (exit status {r.returncode}): {' '.join(cmd)}")
         print((r.stdout + r.stderr).rstrip())
         return False
-    print(f"ok   {name}")
+    last = (r.stdout.strip().splitlines() or [""])[-1] if summary else ""
+    print(f"ok   {name}{': ' + last if last else ''}")
     return True
 
 
@@ -247,7 +249,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.real_build:
         return real_build(args)
 
-    gates = [lambda: run("pytest", [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"])]
+    gates = [lambda: run("pytest", [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"], summary=True)]
     if not args.no_markdownlint:
         npx = shutil.which("npx")
         if npx is None:
