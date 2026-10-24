@@ -79,15 +79,15 @@ architecture sim of osh_tb_spfi_far_end_tb is
     constant Start_c     : natural  := 16#1000# - 4;
     constant Echo_c      : natural  := 1 - RmapVc_g;  -- the virtual channel without the RMAP target
 
-    constant IdleLane_c : PaModelLane_t := (
-        TxInvert => false,
-        SkewUi   => 0,
-        Idle     => true,
-        ErrReq   => 0,
-        BurstReq => 0,
-        BurstLen => 8,
-        ErrEvery => 0
-    );
+    -- A lane in electrical idle, the other channel effects of the model at their defaults
+    function idle_lane return PaModelLane_t is
+        variable Lane_v : PaModelLane_t := PaModelLaneDefault_c;
+    begin
+        Lane_v.Idle := true;
+        return Lane_v;
+    end function;
+
+    constant IdleLane_c : PaModelLane_t := idle_lane;
 
     signal RefClk : std_logic := '0';
     signal Clk    : std_logic := '0';
@@ -108,6 +108,11 @@ architecture sim of osh_tb_spfi_far_end_tb is
     signal PhyRxValid, PhyTxEnable, PhyRxEnable, PhyCdrEnable, PhyRxInvert, PhyNoSignal, PhyNearLoopback,
         PhyFarLoopback, PhyPrbsForceErr, PhyPrbsCntReset, PhyPrbsErr, PhyPrbsLocked, PhyAligned :
         std_logic_vector(NumLanes_g - 1 downto 0);
+    -- Receiver reset of the adapter, joined as the Composer export joins it
+    signal PhyRxResetOnDisc, PhyRxResetCdrOnly, PhyCdrHoldIdle : std_logic;
+    signal PhyPcsRsvdIn : std_logic_vector(15 downto 0);
+    signal PhyRxResetCmd, PhyRxBufErr, PhyTxBufErr, PhyRxResetDone, PhyRxResetBusy, PhyCdrLock, PhyRxElecIdle,
+        PhyEvRxReset, PhyEvRxResetTimeout : std_logic_vector(NumLanes_g - 1 downto 0);
 
     signal SVcTData  : std_logic_vector(Beat_c * NumVc_c - 1 downto 0)     := (others => '0');
     signal SVcTKeep  : std_logic_vector(Beat_c / 8 * NumVc_c - 1 downto 0) := (others => '0');
@@ -199,11 +204,23 @@ begin
             Phy_PrbsCntReset       => PhyPrbsCntReset,
             Phy_PrbsErr            => PhyPrbsErr,
             Phy_PrbsLocked         => PhyPrbsLocked,
+            Cfg_RxResetOnDisc      => PhyRxResetOnDisc,
+            Cfg_RxResetCdrOnly     => PhyRxResetCdrOnly,
+            Cfg_CdrHoldIdle        => PhyCdrHoldIdle,
+            Cfg_PcsRsvdIn          => PhyPcsRsvdIn,
+            Cmd_RxReset            => PhyRxResetCmd,
             Stat_TxReady           => TxReady,
             Stat_RxReady           => open,
             Stat_Aligned           => PhyAligned,
-            Stat_RxBufErr          => open,
-            Stat_ClkCor            => open
+            Stat_RxBufErr          => PhyRxBufErr,
+            Stat_ClkCor            => open,
+            Stat_TxBufErr          => PhyTxBufErr,
+            Stat_RxResetDone       => PhyRxResetDone,
+            Stat_RxResetBusy       => PhyRxResetBusy,
+            Stat_CdrLock           => PhyCdrLock,
+            Stat_RxElecIdle        => PhyRxElecIdle,
+            Ev_RxReset             => PhyEvRxReset,
+            Ev_RxResetTimeout      => PhyEvRxResetTimeout
         );
 
     i_port : entity openfibre.ofb_core
@@ -279,7 +296,20 @@ begin
             Phy_PrbsForceErr       => PhyPrbsForceErr,
             Phy_PrbsCntReset       => PhyPrbsCntReset,
             Phy_PrbsErr            => PhyPrbsErr,
-            Phy_PrbsLocked         => PhyPrbsLocked
+            Phy_PrbsLocked         => PhyPrbsLocked,
+            Phy_RxResetOnDisc      => PhyRxResetOnDisc,
+            Phy_RxResetCdrOnly     => PhyRxResetCdrOnly,
+            Phy_CdrHoldIdle        => PhyCdrHoldIdle,
+            Phy_PcsRsvdIn          => PhyPcsRsvdIn,
+            Phy_RxResetCmd         => PhyRxResetCmd,
+            Phy_RxBufErr           => PhyRxBufErr,
+            Phy_TxBufErr           => PhyTxBufErr,
+            Phy_RxResetDone        => PhyRxResetDone,
+            Phy_RxResetBusy        => PhyRxResetBusy,
+            Phy_CdrLock            => PhyCdrLock,
+            Phy_RxElecIdle         => PhyRxElecIdle,
+            Phy_EvRxReset          => PhyEvRxReset,
+            Phy_EvRxResetTimeout   => PhyEvRxResetTimeout
         );
 
     i_nchar : entity openspp.spp_nchar
