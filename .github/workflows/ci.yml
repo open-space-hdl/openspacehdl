@@ -1,0 +1,166 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new head of a pull request cancels the run of the previous one
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+        python: ["3.10", "3.14"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install Python packages
+        # the package with its optional dependency vunit (pip takes VUnit 4.7.1)
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e ".[vunit]"
+      - name: Gates (pytest, no em-dash)
+        run: python tools/check.py --no-markdownlint
+
+  linting:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Markdown lint
+        uses: DavidAnson/markdownlint-cli2-action@v24
+        with:
+          config: .markdownlint.json
+          globs: |
+            *.md
+            docs/**/*.md
+
+  family-data:
+    # Compares src/openspacehdl/data/family.json with the project cards of the website as they are now
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Python packages
+        run: python -m pip install -r requirements-dev.txt
+      - name: Clone of the website
+        run: git clone -q --filter=blob:none https://github.com/open-space-hdl/open-space-hdl.github.io ../site
+      - name: Family data up to date
+        run: python tools/family_data.py --site ../site --check
+
+  exports:
+    # The fixtures of tests/fixtures/composer are the files of the website commit they come from, and their stored
+    # exports are those of tools/composer_hdl.mjs of that commit (docs/design.md, section 9)
+    runs-on: ubuntu-24.04
+    env:
+      FIXTURE_COMMIT: 8fa23f0fade85d22af337efff48ae021136ff9fb
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Website at the commit of the fixtures
+        run: |
+          git init -q ../site
+          git -C ../site fetch -q --depth 1 https://github.com/open-space-hdl/open-space-hdl.github.io "$FIXTURE_COMMIT"
+          git -C ../site checkout -q FETCH_HEAD
+      - name: Stored exports up to date
+        shell: bash
+        run: |
+          fx="$GITHUB_WORKSPACE/tests/fixtures/composer"
+          for s in system-1 system-2; do
+            cmp "../site/composer/schema/$s.json" "$fx/schema/$s.json"
+          done
+          for d in "$fx"/*/; do
+            n=$(basename "$d")
+            [ "$n" = schema ] && continue
+            cmp "../site/assets/composer/examples/$n.composer.json" "$fx/$n/$n.composer.json"
+            (cd ../site && node tools/composer_hdl.mjs "$fx/$n/$n.composer.json" "$RUNNER_TEMP/exports/$n")
+            diff -r "$RUNNER_TEMP/exports/$n" "$fx/$n/hdl"
+            echo "$n: the stored export is current"
+          done
+
+  bench-components:
+    name: Bench components (GHDL, VUnit ${{ matrix.vunit }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        vunit: ["4.7.1", "5.0.0.dev7"]
+    env:
+      # The inputs of the lock manifest (docs/design.md, section 3): the website commit of the Composer catalog and a
+      # release tag of reference-systems. Until reference-systems has a release with the catalog pins (open point O2),
+      # the lock waives L2 and L4; such a manifest serves tests of the build only.
+      SITE_COMMIT: b64fa98987315afee2f2c4ed336c02c23a816ac6
+      REFSYS_TAG: v0.1.0
+      OPENSPACEHDL_ALLOW_WAIVED: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Python packages
+        # vunit_hdl 5.0.0.dev7 is an sdist whose build needs pkg_resources (setuptools < 81)
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install "setuptools<81" wheel "setuptools_scm>=8"
+          python -m pip install --no-build-isolation "vunit_hdl==${{ matrix.vunit }}"
+      - name: Set up GHDL
+        uses: ghdl/setup-ghdl@v1
+        with:
+          version: latest
+          backend: mcode
+      - name: Clones of the lock inputs
+        # the website at the commit of the catalog; every repository of the catalog and reference-systems with their
+        # history and tags (for the Git bundles), Open Logic FT with its submodule; UVVM at the commit the cores pin
+        shell: bash
+        run: |
+          mkdir -p ../in/repos
+          git init -q ../in/site
+          git -C ../in/site fetch -q --depth 1 https://github.com/open-space-hdl/open-space-hdl.github.io "$SITE_COMMIT"
+          git -C ../in/site show "$SITE_COMMIT:assets/composer/catalog.json" > ../in/catalog.json
+          for repo in $(python -c "import json; print(' '.join(s['repo'] for s in json.load(open('../in/catalog.json', encoding='utf-8'))['sources']))"); do
+            git clone -q "https://github.com/open-space-hdl/$repo" "../in/repos/$repo"
+          done
+          git clone -q https://github.com/open-space-hdl/reference-systems ../in/repos/reference-systems
+          git -C ../in/repos/open-logic-ft submodule update -q --init 3rdParty/en_cl_fix
+          read -r core commit < <(python -c "import json; s = [x for x in json.load(open('../in/catalog.json', encoding='utf-8'))['sources'] if x['id'] != 'olo'][0]; print(s['repo'], s['commit'])")
+          uvvm=$(git -C "../in/repos/$core" rev-parse "$commit:uvvm")
+          git init -q ../in/uvvm
+          git -C ../in/uvvm fetch -q --depth 1 https://github.com/UVVM/UVVM "$uvvm"
+      - name: Lock manifest and source snapshots
+        run: |
+          python tools/lock.py --site ../in/site --site-commit "$SITE_COMMIT" --refsys ../in/repos/reference-systems --refsys-tag "$REFSYS_TAG" --repos ../in/repos --uvvm ../in/uvvm --waive L2 --waive L4
+          python tools/snapshot.py --repos ../in/repos --refsys ../in/repos/reference-systems --uvvm ../in/uvvm --allow-waived
+      - name: Install the package with its snapshots
+        run: python -m pip install --no-deps .
+      - name: Bench components
+        run: python tests/hdl/run.py -p 4 --xunit-xml results.xml --no-color
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-results-vunit-${{ matrix.vunit }}
+          path: results.xml

@@ -141,7 +141,9 @@ licence map `tools/portal/licences.json`. `--pin` writes those versions afresh.
 
 `python tools/check.py [--site <clone of open-space-hdl.github.io>]` runs the quality gates (pytest, markdownlint,
 no em-dash, family data) and fails on the exit status of the first gate that fails. `python tools/check.py
---real-build ...` builds and checks a wheel with content from a copy of HEAD, on demand.
+--real-build ...` builds and checks a wheel with content from a copy of HEAD, on demand. The workflow CI
+(`.github/workflows/ci.yml`) runs the gates on Linux and Windows, checks the stored Composer exports of the tests and
+runs the bench components in GHDL on every pull request.
 
 [docs/release.md](docs/release.md) is the checklist of a release.
 

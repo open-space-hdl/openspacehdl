@@ -1,6 +1,7 @@
-"""Tests of tools/check.py: the steps of the real build."""
+"""Tests of tools/check.py: the report of a gate and the steps of the real build."""
 
 import importlib.util
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -15,6 +16,33 @@ def load(name):
 
 check = load("check")
 BASE = ["--real-build", "--site", "site", "--refsys", "rs", "--refsys-tag", "v0.2.0", "--repos", "repos"]
+
+
+def gate(capsys, code: str, **kw) -> tuple[bool, str]:
+    ok = check.run("g", [sys.executable, "-c", code], **kw)
+    return ok, capsys.readouterr().out
+
+
+def test_a_gate_with_summary_reports_the_last_line_of_its_output(capsys):
+    assert gate(capsys, "print('collected'); print('308 passed, 1 skipped in 2.0s')", summary=True) == (
+        True, "ok   g: 308 passed, 1 skipped in 2.0s\n")
+
+
+def test_a_gate_without_summary_reports_only_its_name(capsys):
+    assert gate(capsys, "print('308 passed')") == (True, "ok   g\n")
+
+
+def test_a_failing_gate_reports_its_exit_status_and_output(capsys):
+    ok, out = gate(capsys, "import sys; print('1 failed'); sys.exit(1)", summary=True)
+    assert not ok and out.startswith("FAIL g (exit status 1): ") and out.endswith("1 failed\n")
+
+
+def test_the_pytest_gate_reports_its_counts(monkeypatch):
+    # the CI log shows the counts of pytest (passed, skipped); the first gate that fails stops the run
+    seen = []
+    monkeypatch.setattr(check, "run", lambda name, cmd, **kw: seen.append((name, cmd[1:3], kw)) or False)
+    assert check.main(["--no-markdownlint"]) == 1
+    assert seen == [("pytest", ["-m", "pytest"], {"summary": True})]
 
 
 def steps(monkeypatch, argv):

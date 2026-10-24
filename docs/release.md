@@ -46,7 +46,8 @@ and 5.0 where a level uses VUnit:
 | Bench components | `python tests/hdl/run.py` with the installed wheel | every test passes, none skipped |
 | Systems | every example of the Composer at the website commit of the lock, with its export by `node tools/composer_hdl.mjs` of that commit, and every system of the reference-systems release: `openspacehdl new`, `python sim/run.py "*.test_smoke" "*.test_streams"`, `openspacehdl update` | `new` writes the project without a warning; every test passes and none is skipped; `update` reports nothing to update and changes no file |
 | Portal | `openspacehdl serve --no-browser` from the installed wheel | the website, the Composer and its catalog, every documentation path of the catalog and the start page of every documentation site are served; scripts as `text/javascript` |
-| Linux | pytest, the offline install and one system of the systems level, in WSL until the repository has a CI (open point O6) | as above |
+| CI | the workflow CI on the head of the release branch (open point O6): pytest on Linux and Windows, markdownlint, the family data, the exports, the bench components | every job passes |
+| Linux | the offline install and one system of the systems level on Linux (WSL or a Linux machine) | as above |
 | Distribution | `twine check --strict` on every file to upload | passes |
 
 The test case `test_image_stream` is not part of the systems level: one image takes hours in GHDL, as the README of a
@@ -70,8 +71,8 @@ point O9 of design.md, decided at the first content release.
 ## 5. Upload
 
 - The maintainer uploads the files with twine from their own terminal, with a token scoped to the project. The token
-  is entered only there. Publishing through GitHub Actions with Trusted Publishing comes when the repository is
-  public.
+  is entered only there. Publishing through GitHub Actions with Trusted Publishing comes later, with a publishing
+  workflow and the trusted publisher on PyPI set up by the maintainer.
 - Every file stays below the file limit of the project on PyPI (rule L9, 100 MB by default).
 - After the upload, the SHA-256 of every file on PyPI equals the local file, and fresh virtual environments of both
   Python versions install the version from PyPI and run `openspacehdl --version`, `info` and `lock`.
