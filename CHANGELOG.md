@@ -61,6 +61,7 @@ All notable changes of the package. Versions follow [semantic versioning](https:
 - The SpaceFibre far end `osh_tb_spfi_far_end` joins its core and its adapter with the receiver reset signals of the
   `Phy` interface of OpenFibre v0.1.3, as the Composer export joins a system port, and keeps the settings of the
   standard. New rule L12: the lock refuses an OpenFibre older than v0.1.3.
+- The package metadata links the source repository (`Repository`), which is public.
 
 ### Fixed
 
