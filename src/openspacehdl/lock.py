@@ -23,6 +23,9 @@ REFSYS_REPO = "reference-systems"
 OLO_ID = "olo"
 UVVM_REPO = "UVVM/UVVM"
 RELEASE_TAG = re.compile(r"v\d+\.\d+\.\d+")
+# The oldest release of a core that the bench components (osh_tb) work with, rule L12: the SpaceFibre far end joins
+# the receiver reset signals of the Phy interface, which OpenFibre has since v0.1.3
+MIN_RELEASES = {"openfibre": "v0.1.3"}
 
 
 @dataclass(frozen=True)
@@ -75,10 +78,14 @@ def _tags_of(inputs: Inputs, repo: str, commit: str | None) -> list[str]:
     return sorted(t for t, c in inputs.tags.get(repo, {}).items() if c == commit)
 
 
+def _version(tag: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in tag[1:].split("."))
+
+
 def _release_tag(inputs: Inputs, repo: str, commit: str | None) -> str | None:
     """The release tag vX.Y.Z of this commit; the highest when there are several."""
     tags = [t for t in _tags_of(inputs, repo, commit) if RELEASE_TAG.fullmatch(t)]
-    return max(tags, key=lambda t: tuple(int(x) for x in t[1:].split("."))) if tags else None
+    return max(tags, key=_version) if tags else None
 
 
 def _named(inputs: Inputs, repo: str, commit: str | None) -> str:
@@ -93,7 +100,7 @@ def split_sources(inputs: Inputs) -> tuple[dict | None, list[dict]]:
 
 
 def check(inputs: Inputs) -> list[Violation]:
-    """Every violation of the rules L1 to L5 and L10 (docs/design.md, section 3.3)."""
+    """Every violation of the rules L1 to L5, L10 and L12 (docs/design.md, section 3.3)."""
     out: list[Violation] = []
     olo, cores = split_sources(inputs)
 
@@ -163,10 +170,20 @@ def check(inputs: Inputs) -> list[Violation]:
     if len(commits) != 1:
         found = ", ".join(f"{r} {_short(c)}" for r, c in sorted(inputs.uvvm.items())) or "none"
         out.append(Violation("L10", f"the cores do not pin one UVVM commit: {found}"))
+
+    # L12: the releases the bench components work with
+    for s in cores:
+        repo, least = s["repo"], MIN_RELEASES.get(s["repo"])
+        if least is None:
+            continue
+        tag = _release_tag(inputs, repo, s.get("commit"))
+        if tag is None or _version(tag) < _version(least):
+            out.append(Violation("L12", f"{repo}: the catalog pins {_named(inputs, repo, s.get('commit'))}, the bench "
+                                        f"components of this package need the release {least} or a later one"))
     return out
 
 
-RULES = ("L1", "L2", "L3", "L4", "L5", "L10")
+RULES = ("L1", "L2", "L3", "L4", "L5", "L10", "L12")
 
 
 def build(inputs: Inputs, package_version: str, files: dict[str, dict[str, str]] | None = None,

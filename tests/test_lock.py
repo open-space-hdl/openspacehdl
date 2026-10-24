@@ -187,6 +187,49 @@ def test_a_core_reference_systems_does_not_use_is_not_compared():
     assert lock.check(i) == []
 
 
+C_OFB = "f" * 40
+
+
+def with_openfibre(tags: dict[str, str]) -> lock.Inputs:
+    """The consistent set with OpenFibre at C_OFB, with these tags (all published)."""
+    i = inputs()
+    i.catalog_sources.insert(0, {"id": "openfibre", "name": "OpenFibre", "repo": "openfibre", "commit": C_OFB,
+                                 "library": "openfibre", "fileList": "compile_order.txt", "fileListFormat": "files",
+                                 "verifiedWith": "4.7.0-ft.8"})
+    i.cards["openfibre"] = {"public": True, "trl": 3}
+    i.tags["openfibre"] = tags
+    i.published_tags["openfibre"] = set(tags)
+    i.uvvm["openfibre"] = C_UVVM
+    return i
+
+
+@pytest.mark.parametrize("tag", ["v0.1.3", "v0.1.10", "v0.2.0", "v1.0.0"])
+def test_openfibre_from_0_1_3_on_serves_the_bench_components(tag):
+    assert lock.check(with_openfibre({tag: C_OFB})) == []
+
+
+@pytest.mark.parametrize("tag", ["v0.1.2", "v0.1.1", "v0.0.9"])
+def test_an_older_openfibre_breaks_l12(tag):
+    violations = lock.check(with_openfibre({tag: C_OFB, "v0.1.3": "e" * 40}))
+    assert [v.rule for v in violations] == ["L12"], violations
+    assert violations[0].message == (f"openfibre: the catalog pins fffffff ({tag}), the bench components of this "
+                                     f"package need the release v0.1.3 or a later one")
+
+
+def test_openfibre_without_a_release_tag_breaks_l1_and_l12():
+    violations = lock.check(with_openfibre({"v0.1.3": "e" * 40}))
+    assert [v.rule for v in violations] == ["L1", "L12"], violations
+    assert violations[1].message.startswith("openfibre: the catalog pins fffffff, ")
+
+
+def test_build_refuses_an_older_openfibre_unless_l12_is_waived():
+    i = with_openfibre({"v0.1.2": C_OFB})
+    with pytest.raises(LockError, match="L12: openfibre"):
+        lock.build(i, "0.1.0")
+    m = lock.build(i, "0.1.0", waive=("L12",))
+    assert m["waived"] == ["L12"] and m["cores"][0]["tag"] == "v0.1.2"
+
+
 def test_build_writes_the_manifest():
     m = lock.build(inputs(), "0.1.0")
     assert m["format"] == "openspacehdl-lock" and m["version"] == 1 and m["package"] == "0.1.0"

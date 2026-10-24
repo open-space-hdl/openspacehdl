@@ -115,6 +115,7 @@ The build of the package stops with an error when one of these rules fails:
 | L9 | The wheel stays below the file size limit of the project on PyPI (section 4.3). |
 | L10 | Every core pins the same UVVM commit; it is the UVVM of the manifest. |
 | L11 | No file of the portal loads a resource from another origin (images, scripts, style sheets, fonts, fetches), every link to a path of the portal resolves (in the pages and in the documentation links of the Composer catalog), the website has no path where a documentation site goes, and every documentation site with the glightbox plugin has glightbox anchors (section 8). |
+| L12 | Every core that a bench component of the package instantiates is pinned at a release the component works with: OpenFibre v0.1.3 or a later release, whose `Phy` interface carries the receiver reset signals that the SpaceFibre far end joins (section 6.3). |
 
 The `verifiedWith` tag of a core may differ from the Open Logic tag of the manifest: the reference systems are
 verified with that tag. `openspacehdl lock` and `add_core` show both.
@@ -378,7 +379,7 @@ The harness `<system>_th.vhd` instantiates the system, the UVVM engine and, for 
 | streams (`spp.tx`, `byte.stream`, `c123.samples`, ...) | sink | `osh_tb_axis_master`: the UVVM AXI4-Stream VVC, transmitter; data of a width that is not a multiple of 8 is padded to whole bytes, which the UVVM BFM needs |
 | streams (`spp.rx`, ...) | source | `osh_tb_axis_slave`: the UVVM AXI4-Stream VVC, receiver |
 | `spw.ds` | pins | `osh_tb_spw_far_end`: an `owr_core` and an RMAP initiator, the lines joined crosswise |
-| `spfi.serial` | pins | `osh_tb_spfi_far_end`: an `ofb_core` with `ofb_pa_gty` (architecture `mdl` in GHDL, control record 1 + k of the model for far end k) and an RMAP initiator through an `spp_nchar` on the virtual channel of the system's RMAP target, with the lane count and the virtual channels of the system's port, lane i to lane i |
+| `spfi.serial` | pins | `osh_tb_spfi_far_end`: an `ofb_core` with `ofb_pa_gty` (architecture `mdl` in GHDL, control record 1 + k of the model for far end k) and an RMAP initiator through an `spp_nchar` on the virtual channel of the system's RMAP target, with the lane count and the virtual channels of the system's port and the other settings at their defaults, lane i to lane i |
 
 Inputs that no component drives are held idle.
 
@@ -391,6 +392,13 @@ Initiator only (one outstanding command, reply timeout 1 ms); the testbench send
 target through `connections`: the target's `S_Pkt` directly on `M_Pkt` of an `owr_core`, or on an `spp_nchar` whose
 `S_Link` comes from `M_Vc[k]` of an `ofb_core` whose `Phy` goes to an `ofb_pa_gty` with external pins (virtual
 channel k). In every Composer example and reference system with a SpaceFibre link the target is on virtual channel 0.
+
+The SpaceFibre far end joins its `ofb_core` and its `ofb_pa_gty` as the Composer export joins them in a system, with
+the receiver reset signals of the `Phy` interface (OpenFibre v0.1.3 or a later release, rule L12). It stands for a
+remote end with the settings of the standard: its core and its adapter keep their defaults (the initialisation timeout
+of 5000 words of ECSS 5.5.2.6b.1 and the receiver reset gap of 400000 cycles of the free-running clock), whatever the
+system's port sets. A link of the testbench thus pairs a port with the settings of its board and a remote end that
+follows the standard, as a link to such a device does in hardware.
 
 The far ends carry user packets as well. The initiator of the SpaceWire far end passes every packet that is not an
 RMAP reply to its user port (`Passthrough_g`); the SpaceFibre far end has a user port at every virtual channel other
@@ -629,7 +637,7 @@ status badges of Open Logic FT ends once its documentation strips them itself.
 
 | Level | What | Simulator or tool |
 | --- | --- | --- |
-| Unit | Lock generation and the rules L1 to L6 with consistent and inconsistent fixture sets; every refusal of section 6.1; the interface type mapping; the update table of section 6.4; `add_core` and its errors against a recording stand-in of the VUnit object; `serve` on an ephemeral port of 127.0.0.1 with its media types; `export` as a tree and with `--git`; the post-processing of the portal, the checks of L11 and the licence map on small trees, and the portal build with the website and documentation builds replaced by fixture sites | pytest |
+| Unit | Lock generation and the rules L1 to L6, L10 and L12 with consistent and inconsistent fixture sets; every refusal of section 6.1; the interface type mapping; the update table of section 6.4; `add_core` and its errors against a recording stand-in of the VUnit object; `serve` on an ephemeral port of 127.0.0.1 with its media types; `export` as a tree and with `--git`; the post-processing of the portal, the checks of L11 and the licence map on small trees, and the portal build with the website and documentation builds replaced by fixture sites | pytest |
 | Mutation | Each refusal and each update rule is proven by a mutation of the package that makes a test fail; a system file with a wrong ID value makes the smoke test fail | pytest, GHDL |
 | Cores | `add_core` of every core, alone and all in one project, compiles in GHDL | GHDL through VUnit |
 | Systems | Every example of the Composer (seven at the website commit of the lock) and the systems of the reference-systems release: `new`, then `python sim/run.py`, the smoke test and the stream test pass; `update` right after `new` changes nothing | GHDL through VUnit |

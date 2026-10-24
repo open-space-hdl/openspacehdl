@@ -23,7 +23,14 @@
 -- SpaceFibre far end of the system testbenches: an OpenFibre ofb_core with its own physical adapter
 -- ofb_pa_gty as the second port of a link of the system (in GHDL the adapter is its behavioural model,
 -- the architecture mdl, with the control record ModelIdx_g of ofb_pa_model_pkg). The harness joins
--- lane i to lane i in both directions. The virtual channel RmapVc_g carries the RMAP initiator
+-- lane i to lane i in both directions. The core and the adapter are joined as the Composer export joins
+-- them in a system, with the receiver reset signals of the Phy interface (OpenFibre v0.1.3 or later).
+-- The far end stands for a remote end with the settings of the standard: its core and its adapter keep
+-- their defaults (the initialisation timeout of 5000 words of ECSS 5.5.2.6b.1, the receiver reset gap
+-- of 400000 FreeRunClk cycles), whatever the system's port sets. So a link of the testbench pairs a
+-- port with the settings of its board and a remote end that follows the standard, as a link to such a
+-- device does in hardware.
+-- The virtual channel RmapVc_g carries the RMAP initiator
 -- osh_tb_rmap_initiator through an OpenSPP spp_nchar (N-Char stream to the link stream of the
 -- channel). Every other channel v carries packets through the queues Index_g, v of osh_link
 -- (osh_tb_link_pkg): received packets go to the receive queue, the packets of the send queue leave.
@@ -138,6 +145,21 @@ architecture sim of osh_tb_spfi_far_end is
     signal PhyPrbsLocked   : std_logic_vector(NumLanes_g - 1 downto 0);
     signal PhyAligned      : std_logic_vector(NumLanes_g - 1 downto 0);
 
+    -- Receiver reset of the adapter: configuration and command of the core, status and events of the adapter
+    signal PhyRxResetOnDisc    : std_logic;
+    signal PhyRxResetCdrOnly   : std_logic;
+    signal PhyCdrHoldIdle      : std_logic;
+    signal PhyPcsRsvdIn        : std_logic_vector(15 downto 0);
+    signal PhyRxResetCmd       : std_logic_vector(NumLanes_g - 1 downto 0);
+    signal PhyRxBufErr         : std_logic_vector(NumLanes_g - 1 downto 0);
+    signal PhyTxBufErr         : std_logic_vector(NumLanes_g - 1 downto 0);
+    signal PhyRxResetDone      : std_logic_vector(NumLanes_g - 1 downto 0);
+    signal PhyRxResetBusy      : std_logic_vector(NumLanes_g - 1 downto 0);
+    signal PhyCdrLock          : std_logic_vector(NumLanes_g - 1 downto 0);
+    signal PhyRxElecIdle       : std_logic_vector(NumLanes_g - 1 downto 0);
+    signal PhyEvRxReset        : std_logic_vector(NumLanes_g - 1 downto 0);
+    signal PhyEvRxResetTimeout : std_logic_vector(NumLanes_g - 1 downto 0);
+
 begin
 
     assert RmapVc_g < NumVc_g
@@ -182,11 +204,23 @@ begin
             Phy_PrbsCntReset       => PhyPrbsCntReset,
             Phy_PrbsErr            => PhyPrbsErr,
             Phy_PrbsLocked         => PhyPrbsLocked,
+            Cfg_RxResetOnDisc      => PhyRxResetOnDisc,
+            Cfg_RxResetCdrOnly     => PhyRxResetCdrOnly,
+            Cfg_CdrHoldIdle        => PhyCdrHoldIdle,
+            Cfg_PcsRsvdIn          => PhyPcsRsvdIn,
+            Cmd_RxReset            => PhyRxResetCmd,
             Stat_TxReady           => TxReady,
             Stat_RxReady           => open,
             Stat_Aligned           => PhyAligned,
-            Stat_RxBufErr          => open,
-            Stat_ClkCor            => open
+            Stat_RxBufErr          => PhyRxBufErr,
+            Stat_ClkCor            => open,
+            Stat_TxBufErr          => PhyTxBufErr,
+            Stat_RxResetDone       => PhyRxResetDone,
+            Stat_RxResetBusy       => PhyRxResetBusy,
+            Stat_CdrLock           => PhyCdrLock,
+            Stat_RxElecIdle        => PhyRxElecIdle,
+            Ev_RxReset             => PhyEvRxReset,
+            Ev_RxResetTimeout      => PhyEvRxResetTimeout
         );
 
     i_port : entity openfibre.ofb_core
@@ -264,7 +298,20 @@ begin
             Phy_PrbsForceErr       => PhyPrbsForceErr,
             Phy_PrbsCntReset       => PhyPrbsCntReset,
             Phy_PrbsErr            => PhyPrbsErr,
-            Phy_PrbsLocked         => PhyPrbsLocked
+            Phy_PrbsLocked         => PhyPrbsLocked,
+            Phy_RxResetOnDisc      => PhyRxResetOnDisc,
+            Phy_RxResetCdrOnly     => PhyRxResetCdrOnly,
+            Phy_CdrHoldIdle        => PhyCdrHoldIdle,
+            Phy_PcsRsvdIn          => PhyPcsRsvdIn,
+            Phy_RxResetCmd         => PhyRxResetCmd,
+            Phy_RxBufErr           => PhyRxBufErr,
+            Phy_TxBufErr           => PhyTxBufErr,
+            Phy_RxResetDone        => PhyRxResetDone,
+            Phy_RxResetBusy        => PhyRxResetBusy,
+            Phy_CdrLock            => PhyCdrLock,
+            Phy_RxElecIdle         => PhyRxElecIdle,
+            Phy_EvRxReset          => PhyEvRxReset,
+            Phy_EvRxResetTimeout   => PhyEvRxResetTimeout
         );
 
     -----------------------------------------------------------------------------------------------
