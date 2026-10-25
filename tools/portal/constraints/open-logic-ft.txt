@@ -1,4 +1,4 @@
-# pip freeze of the documentation site of open-logic-ft at f9e7f59 (Python 3.12), written by tools/portal.py --pin
+# pip freeze of the documentation site of open-logic-ft at 227eecd (Python 3.12), written by tools/portal.py --pin
 babel==2.18.0
 backrefs==8.1
 certifi==2026.10.23

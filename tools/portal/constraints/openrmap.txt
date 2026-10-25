@@ -1,4 +1,4 @@
-# pip freeze of the documentation site of openrmap at 77868aa (Python 3.12), written by tools/portal.py --pin
+# pip freeze of the documentation site of openrmap at caac2f3 (Python 3.12), written by tools/portal.py --pin
 babel==2.18.0
 backrefs==8.1
 certifi==2026.10.23
@@ -28,7 +28,7 @@ python-dateutil==3.0.0
 PyYAML==6.0.3
 pyyaml_env_tag==1.1
 requests==2.34.2
-selectolax==1.0.2
+selectolax==1.0.0
 six==1.17.0
 tzdata==2026.5
 urllib3==2.8.0

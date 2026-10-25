@@ -621,17 +621,17 @@ English, and the search loads these files only for other languages; they come wi
 rewrites the links between the sites: a link to `https://openspacehdl.org/<path>` that the portal serves becomes
 `/<path>`, a link to `/<path>` outside the portal becomes `https://openspacehdl.org/<path>` (the OpenDMA card,
 whose core is not in the lock), and a link to a missing page of a site of the portal stays and fails rule L11. It
-removes the third-party status badges that two pages of Open Logic FT 4.7.0-ft.8 still load. Rule L11 (section 3.3)
-and the licence map (section 4.4) then check the result, and only a portal that passes replaces
-`openspacehdl/portal/`. `data/portal.json` records the inputs (the website commit, per site its commit, its
+removes the third-party images of the pages that `STRIP_IMAGES` lists for a site at its pinned commit; the list is
+empty since Open Logic FT 4.7.0-ft.11 strips its status badges itself (4.7.0-ft.8 still loaded them on two pages).
+Rule L11 (section 3.3) and the licence map (section 4.4) then check the result, and only a portal that passes
+replaces `openspacehdl/portal/`. `data/portal.json` records the inputs (the website commit, per site its commit, its
 configuration directory, its Python version and the hash of its constraints) and the SHA-256 and licence of every
 file; the wheel check compares the wheel with it (rule L6).
 
 The documentation links of the Composer come from the field `doc` of the catalog. From catalog 75d78f7588f4 (website
 8fa23f0, generator 0.9.9-beta) on they are paths of the site, so they stay in the portal, and rule L11 checks that
 each resolves; the files the Composer saves still name the full address. An older catalog has full addresses, which
-leave the portal; the portal never rewrites the catalog, whose id is the hash of its content. The removal of the
-status badges of Open Logic FT ends once its documentation strips them itself.
+leave the portal; the portal never rewrites the catalog, whose id is the hash of its content.
 
 ## 9. Test strategy
 
@@ -731,7 +731,7 @@ Libero and a PolarFire board form a second board family (phase C).
 | O3 | `resolved.version` of the Composer is decided but not yet written into saved files. | Decided: the Composer writes it from generator 0.9.8-beta on; the package refuses an unknown version. For files of older generators it validates against the schema and warns on a generator version it was not tested with. |
 | O4 | Which virtual channel of a SpaceFibre link carries the RMAP target. | Decided: traced in the resolved netlist from the target to the port; `new` refuses when it cannot. |
 | O5 | The documentation sites are built at the tags of the cores, with their own MkDocs toolchains. | Decided: every site is built in its own environment with the requirements of `tools/docs` of the repository at its pin (`tools/ft_docs` in Open Logic FT), the constraints of the package for what they leave open, and the Python version of the documentation workflow of the repository (section 8). |
-| O6 | Linux tests while the repository was private and had no CI. | Decided: the workflow CI (`.github/workflows/ci.yml`) runs on every pull request and on `main` and `develop`: the gates of `tools/check.py` without markdownlint (pytest, no em-dash) on Linux and Windows with Python 3.10 and 3.14, markdownlint, the family data against the website, the exports level, and the bench components in GHDL with VUnit 4.7.1 and 5.0.0.dev7 on a lock of the website commit the workflow names (L2 and L4 waived until open point O2 is closed). The offline install and a system of the systems level on Linux stay steps of the release checklist. |
+| O6 | Linux tests while the repository was private and had no CI. | Decided: the workflow CI (`.github/workflows/ci.yml`) runs on every pull request and on `main` and `develop`: the gates of `tools/check.py` without markdownlint (pytest, no em-dash) on Linux and Windows with Python 3.10 and 3.14, markdownlint, the family data against the website, the exports level, and the bench components in GHDL with VUnit 4.7.1 and 5.0.0.dev7 on a lock of the website commit the workflow names (L2, L3 and L4 waived until open point O2 is closed). The offline install and a system of the systems level on Linux stay steps of the release checklist. |
 | O7 | The website repository has no licence file, so the licence of the website content and of the Composer in the portal is not stated. | Decided: MIT for the code, CC BY 4.0 for the texts and images; logo, favicon and touch icon stay all rights reserved; third-party fonts and assets keep their licences (section 4.4). The website carries the licence files since b124129, and the portal is in the wheel. |
 | O8 | Where the board data of a build target lives: in the Composer file and its catalog, or in the package. | Decided: in the package (section 10.1); the Composer file format is unchanged, and `new --target <board>` writes `build/<board>/` with a seed assignment of the interfaces to the connectors. |
 | O9 | The source distribution of a version with content carries the snapshots, the bundles and the portal like the wheel (48.8 MiB at website 8fa23f0 and reference-systems v0.1.0). The wheel is `py3-none-any` and installs on every platform; every uploaded file counts against the storage limit of the project on PyPI. | Open: whether a release uploads the source distribution beside the wheel; decided at the first content release (release checklist, [release.md](release.md)). |

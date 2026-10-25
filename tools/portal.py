@@ -76,11 +76,9 @@ DROPPED_DIRS = ("assets/javascripts/lunr",)
 DROPPED_FILES = ("CNAME",)
 
 # Third-party images that a documentation site still loads at its pinned commit, removed from the listed pages until
-# the repository drops them: Open Logic FT 4.7.0-ft.8 keeps status badges inside lines that its strip patterns miss.
-STRIP_IMAGES = {
-    ("open-logic-ft", "f9e7f596e5e4c547e17087d89e3ce1289514d42d"): ("Readme.html",
-                                                                    "doc/base/olo_base_pkg_attribute.html"),
-}
+# the repository drops them: (repository, commit) -> pages. None today: Open Logic FT strips its status badges itself
+# since 4.7.0-ft.11 (4.7.0-ft.8 needed Readme.html and doc/base/olo_base_pkg_attribute.html here).
+STRIP_IMAGES: dict[tuple[str, str], tuple[str, ...]] = {}
 
 
 class Violation(Exception):
