@@ -62,6 +62,9 @@ All notable changes of the package. Versions follow [semantic versioning](https:
   `Phy` interface of OpenFibre v0.1.3, as the Composer export joins a system port, and keeps the settings of the
   standard. New rule L12: the lock refuses an OpenFibre older than v0.1.3.
 - The package metadata links the source repository (`Repository`), which is public.
+- The portal pins follow catalog 955cea8c7666 (Open Logic FT 4.7.0-ft.11, OpenFibre v0.1.4, OpenRMAP v0.1.1): the
+  documentation of OpenRMAP builds with selectolax 1.0.0, its own pin; the portal no longer removes images of Open
+  Logic FT, which strips its status badges itself.
 
 ### Fixed
 

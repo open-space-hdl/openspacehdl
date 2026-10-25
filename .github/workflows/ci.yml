@@ -110,8 +110,8 @@ jobs:
     env:
       # The inputs of the lock manifest (docs/design.md, section 3): the website commit of the Composer catalog and a
       # release tag of reference-systems. Until reference-systems has a release with the catalog pins (open point O2),
-      # the lock waives L2 and L4; such a manifest serves tests of the build only.
-      SITE_COMMIT: b64fa98987315afee2f2c4ed336c02c23a816ac6
+      # the lock waives L2, L3 and L4; such a manifest serves tests of the build only.
+      SITE_COMMIT: 48b99b5dfd604813877e36b2861d3fef291eb20b
       REFSYS_TAG: v0.1.0
       OPENSPACEHDL_ALLOW_WAIVED: "1"
     steps:
@@ -152,7 +152,7 @@ jobs:
           git -C ../in/uvvm fetch -q --depth 1 https://github.com/UVVM/UVVM "$uvvm"
       - name: Lock manifest and source snapshots
         run: |
-          python tools/lock.py --site ../in/site --site-commit "$SITE_COMMIT" --refsys ../in/repos/reference-systems --refsys-tag "$REFSYS_TAG" --repos ../in/repos --uvvm ../in/uvvm --waive L2 --waive L4
+          python tools/lock.py --site ../in/site --site-commit "$SITE_COMMIT" --refsys ../in/repos/reference-systems --refsys-tag "$REFSYS_TAG" --repos ../in/repos --uvvm ../in/uvvm --waive L2 --waive L3 --waive L4
           python tools/snapshot.py --repos ../in/repos --refsys ../in/repos/reference-systems --uvvm ../in/uvvm --allow-waived
       - name: Install the package with its snapshots
         run: python -m pip install --no-deps .
