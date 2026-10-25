@@ -16,7 +16,9 @@ section 3). A release branch starts only when:
 - `python tools/lock.py --site <website> --site-commit <commit of composer_ref.txt> --refsys <reference-systems>
   --refsys-tag <tag> --repos <dir> --report` lists no violation, with clones that have the tags of their remotes;
 - the generator version of the Composer at that website commit is in `TESTED_GENERATORS`
-  (`src/openspacehdl/composer.py`), after the system runs of section 3 with files written by it;
+  (`src/openspacehdl/composer.py`). A version joins it in the pull request that moves the pins of the workflow CI to
+  a website commit with that generator, after the CI job `systems` of that pull request passed with files written by
+  it; that job, not a local run, is the evidence of a generator version;
 - the pins of the portal still apply: `tools/portal.py` builds against `tools/portal/Gemfile.lock` and
   `tools/portal/constraints/`. A changed `tests/jekyll/Gemfile` of the website, or a changed requirements file of a
   documentation site, needs a run with `--pin` and a review of its changes in a pull request to `develop`.
@@ -29,7 +31,10 @@ section 3). A release branch starts only when:
 - `CHANGELOG.md`: the heading `## <version> - <date of the tag>` over the entries of Unreleased;
 - the description in `pyproject.toml` and the first paragraph of `README.md`, which describe 0.0.1 (a list of the
   family); the headings of `README.md` that say "from the first version with cores" lose that note;
-- the classifier `Development Status` in `pyproject.toml`, if the content warrants another one.
+- the classifier `Development Status` in `pyproject.toml`, if the content warrants another one;
+- the pins of the workflow CI (`.github/workflows/ci.yml`): `SITE_COMMIT` and `REFSYS_TAG` take the inputs of the
+  lock of the release, and the jobs `package`, `bench-components` and `systems` drop the waived rules and
+  `OPENSPACEHDL_ALLOW_WAIVED`.
 
 ## 3. Evidence on the head of the release branch
 
@@ -44,9 +49,9 @@ and 5.0 where a level uses VUnit:
 | Offline install | fresh virtual environments of both Python versions, `pip install --no-index <wheel>` | `openspacehdl --version`, `info` and `lock` exit with 0 and show the lock of the version |
 | Cores | a VUnit project per core with `add_core`, and one with every core | each compiles in GHDL |
 | Bench components | `python tests/hdl/run.py` with the installed wheel | every test passes, none skipped |
-| Systems | every example of the Composer at the website commit of the lock, with its export by `node tools/composer_hdl.mjs` of that commit, and every system of the reference-systems release: `openspacehdl new`, `python sim/run.py "*.test_smoke" "*.test_streams"`, `openspacehdl update` | `new` writes the project without a warning; every test passes and none is skipped; `update` reports nothing to update and changes no file |
+| Systems | every system of the reference-systems release, with its committed export: `openspacehdl new`, `python sim/run.py "*.test_smoke" "*.test_streams"`, `openspacehdl update` (the examples of the Composer, with their export by `node tools/composer_hdl.mjs`, run in the CI job `systems`, level CI) | `new` writes the project without a warning; every test passes and none is skipped; `update` reports nothing to update and changes no file |
 | Portal | `openspacehdl serve --no-browser` from the installed wheel | the website, the Composer and its catalog, every documentation path of the catalog and the start page of every documentation site are served; scripts as `text/javascript` |
-| CI | the workflow CI on the head of the release branch (open point O6): pytest on Linux and Windows, markdownlint, the family data, the exports, the bench components | every job passes |
+| CI | the workflow CI on the head of the release branch (open point O6): pytest on Linux and Windows, markdownlint, the family data, the exports, the bench components, and the systems level for every example of the Composer at the website commit of the lock | every job passes |
 | Linux | the offline install and one system of the systems level on Linux (WSL or a Linux machine) | as above |
 | Distribution | `twine check --strict` on every file to upload | passes |
 

@@ -11,6 +11,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # The inputs of the lock manifest of the jobs package and systems (docs/design.md, section 3): the website commit of
+  # the Composer catalog and a release tag of reference-systems. Until reference-systems has a release with the catalog
+  # pins (open point O2), the lock waives L2, L3 and L4; such a manifest serves tests of the build only.
+  SITE_COMMIT: 60dee6c6a50f8c8f502f3b1d89306692ac662e79
+  REFSYS_TAG: v0.1.0
+
 # A new head of a pull request cancels the run of the previous one
 concurrency:
   group: ci-${{ github.ref }}
@@ -100,20 +107,11 @@ jobs:
             echo "$n: the stored export is current"
           done
 
-  bench-components:
-    name: Bench components (GHDL, VUnit ${{ matrix.vunit }})
+  package:
+    # The package with the source snapshots and the Git bundles of the lock at SITE_COMMIT and REFSYS_TAG (no portal):
+    # the wheel the jobs bench-components and systems install
+    name: Package with snapshots
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        vunit: ["4.7.1", "5.0.0.dev7"]
-    env:
-      # The inputs of the lock manifest (docs/design.md, section 3): the website commit of the Composer catalog and a
-      # release tag of reference-systems. Until reference-systems has a release with the catalog pins (open point O2),
-      # the lock waives L2, L3 and L4; such a manifest serves tests of the build only.
-      SITE_COMMIT: 48b99b5dfd604813877e36b2861d3fef291eb20b
-      REFSYS_TAG: v0.1.0
-      OPENSPACEHDL_ALLOW_WAIVED: "1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -122,16 +120,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install Python packages
-        # vunit_hdl 5.0.0.dev7 is an sdist whose build needs pkg_resources (setuptools < 81)
-        run: |
-          python -m pip install -r requirements-dev.txt
-          python -m pip install "setuptools<81" wheel "setuptools_scm>=8"
-          python -m pip install --no-build-isolation "vunit_hdl==${{ matrix.vunit }}"
-      - name: Set up GHDL
-        uses: ghdl/setup-ghdl@v1
-        with:
-          version: latest
-          backend: mcode
+        run: python -m pip install -r requirements-dev.txt
       - name: Clones of the lock inputs
         # the website at the commit of the catalog; every repository of the catalog and reference-systems with their
         # history and tags (for the Git bundles), Open Logic FT with its submodule; UVVM at the commit the cores pin
@@ -154,8 +143,47 @@ jobs:
         run: |
           python tools/lock.py --site ../in/site --site-commit "$SITE_COMMIT" --refsys ../in/repos/reference-systems --refsys-tag "$REFSYS_TAG" --repos ../in/repos --uvvm ../in/uvvm --waive L2 --waive L3 --waive L4
           python tools/snapshot.py --repos ../in/repos --refsys ../in/repos/reference-systems --uvvm ../in/uvvm --allow-waived
-      - name: Install the package with its snapshots
-        run: python -m pip install --no-deps .
+      - name: Wheel
+        run: python -m build --wheel --outdir dist
+      - name: Publish the wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-wheel
+          path: dist/*.whl
+
+  bench-components:
+    name: Bench components (GHDL, VUnit ${{ matrix.vunit }})
+    needs: package
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        vunit: ["4.7.1", "5.0.0.dev7"]
+    env:
+      OPENSPACEHDL_ALLOW_WAIVED: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Wheel of the job package
+        uses: actions/download-artifact@v7
+        with:
+          name: package-wheel
+          path: ../wheel
+      - name: Install Python packages
+        # vunit_hdl 5.0.0.dev7 is an sdist whose build needs pkg_resources (setuptools < 81)
+        run: |
+          python -m pip install "setuptools<81" wheel "setuptools_scm>=8"
+          python -m pip install --no-build-isolation "vunit_hdl==${{ matrix.vunit }}"
+          python -m pip install --no-deps ../wheel/*.whl
+      - name: Set up GHDL
+        uses: ghdl/setup-ghdl@v1
+        with:
+          version: latest
+          backend: mcode
       - name: Bench components
         run: python tests/hdl/run.py -p 4 --xunit-xml results.xml --no-color
       - name: Publish test results
@@ -164,3 +192,94 @@ jobs:
         with:
           name: bench-results-vunit-${{ matrix.vunit }}
           path: results.xml
+
+  systems:
+    # Every Composer example of SITE_COMMIT with its export by tools/composer_hdl.mjs of that commit: openspacehdl new,
+    # the smoke and the stream tests of the generated project in GHDL, and update right after them, which must change
+    # nothing (the systems level of docs/design.md, section 9; test_image_stream takes hours and is not run)
+    name: Systems (GHDL, VUnit ${{ matrix.vunit }})
+    needs: package
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        vunit: ["4.7.1", "5.0.0.dev7"]
+    env:
+      OPENSPACEHDL_ALLOW_WAIVED: "1"
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Wheel of the job package
+        uses: actions/download-artifact@v7
+        with:
+          name: package-wheel
+          path: ../wheel
+      - name: Install Python packages
+        # vunit_hdl 5.0.0.dev7 is an sdist whose build needs pkg_resources (setuptools < 81)
+        run: |
+          python -m pip install "setuptools<81" wheel "setuptools_scm>=8"
+          python -m pip install --no-build-isolation "vunit_hdl==${{ matrix.vunit }}"
+          python -m pip install --no-deps ../wheel/*.whl
+      - name: Set up GHDL
+        uses: ghdl/setup-ghdl@v1
+        with:
+          version: latest
+          backend: mcode
+      - name: Website at the commit of the lock
+        run: |
+          git init -q ../site
+          git -C ../site fetch -q --depth 1 https://github.com/open-space-hdl/open-space-hdl.github.io "$SITE_COMMIT"
+          git -C ../site checkout -q FETCH_HEAD
+      - name: Systems
+        shell: bash
+        run: |
+          set -u
+          site=$(cd ../site && pwd)
+          out="$RUNNER_TEMP/systems"
+          mkdir -p "$out"
+          fail=0
+          files() { (cd "$1" && find . -type f -not -path './vunit_out/*' -not -name results.xml -print0 | sort -z | xargs -0 sha256sum); }
+          for f in "$site"/assets/composer/examples/*.composer.json; do
+            n=$(basename "$f" .composer.json)
+            in="$out/in/$n"
+            proj="$out/projects/$n"
+            mkdir -p "$in"
+            cp "$f" "$in/"
+            if ! (cd "$site" && node tools/composer_hdl.mjs "$in/$n.composer.json" "$in/hdl") > "$out/$n.export.log" 2>&1; then
+              echo "::error::$n: the export failed"; cat "$out/$n.export.log"; fail=1; continue
+            fi
+            if ! openspacehdl new "$in/$n.composer.json" "$proj" > "$out/$n.new.log" 2>&1; then
+              echo "::error::$n: new failed"; cat "$out/$n.new.log"; fail=1; continue
+            fi
+            if ! (cd "$proj" && python sim/run.py -p 2 --no-color -x results.xml "*.test_smoke" "*.test_streams") > "$out/$n.run.log" 2>&1; then
+              echo "::error::$n: a test failed"; tail -n 60 "$out/$n.run.log"; fail=1; continue
+            fi
+            before=$(files "$proj")
+            # the warnings of update go to stderr; its report on stdout must be "nothing to update"
+            if ! openspacehdl update "$proj" > "$out/$n.update.log" 2> "$out/$n.update.err" || [ "$(cat "$out/$n.update.log")" != "nothing to update" ]; then
+              echo "::error::$n: update did not report nothing to update"; cat "$out/$n.update.log" "$out/$n.update.err"; fail=1; continue
+            fi
+            if [ "$(files "$proj")" != "$before" ]; then
+              echo "::error::$n: update changed a file"; fail=1; continue
+            fi
+            echo "$n: $(grep -E '^(pass|fail) [0-9]+ of [0-9]+' "$out/$n.run.log" | tail -n 1); update: nothing to update"
+          done
+          exit $fail
+      - name: No warning of an untested generator
+        # a generator version joins TESTED_GENERATORS after this job passed with its files
+        shell: bash
+        run: |
+          if grep -H "this package was tested with" "$RUNNER_TEMP"/systems/*.new.log; then
+            echo "::error::new warns of a generator version the package was not tested with"
+            exit 1
+          fi
+      - name: Publish the results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: systems-results-vunit-${{ matrix.vunit }}
+          path: |
+            ${{ runner.temp }}/systems/*.log
+            ${{ runner.temp }}/systems/projects/*/results.xml

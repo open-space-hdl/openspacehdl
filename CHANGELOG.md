@@ -58,6 +58,7 @@ All notable changes of the package. Versions follow [semantic versioning](https:
   for rule L4 (the commit of `tools/composer_ref.txt` of its reference-systems tag); without it, `origin/main`.
 - Composer generator 0.9.9-beta (website 8fa23f0) is a tested generator: `new` reads its files without the warning
   of an untested generator version.
+- Composer generator 0.9.10-beta (website 60dee6c) is a tested generator, on the evidence of the CI job `systems`.
 - The SpaceFibre far end `osh_tb_spfi_far_end` joins its core and its adapter with the receiver reset signals of the
   `Phy` interface of OpenFibre v0.1.3, as the Composer export joins a system port, and keeps the settings of the
   standard. New rule L12: the lock refuses an OpenFibre older than v0.1.3.
@@ -65,6 +66,8 @@ All notable changes of the package. Versions follow [semantic versioning](https:
 - The portal pins follow catalog 955cea8c7666 (Open Logic FT 4.7.0-ft.11, OpenFibre v0.1.4, OpenRMAP v0.1.1): the
   documentation of OpenRMAP builds with selectolax 1.0.0, its own pin; the portal no longer removes images of Open
   Logic FT, which strips its status badges itself.
+- The portal pins follow catalog 64a6eb49ec58 (OpenCompact v0.2.0): the documentation of OpenCompact builds with
+  selectolax 1.0.0, its own pin.
 
 ### Fixed
 
