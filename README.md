@@ -3,18 +3,21 @@
 Python package of [Open Space HDL](https://openspacehdl.org), a family of open-source VHDL IP cores for spacecraft
 on-board data handling.
 
-> **0.1.0rc1 is a preliminary build** for the first hardware tests of the spfi_compress reference system. It is built
+> **0.1.0rc2 is a preliminary build** for the first hardware tests of the spfi_compress reference system. It is built
 > from development commits, not from releases:
 >
 > - reference-systems 1c1976ef4b93;
 > - the Composer catalog fd594297bc51 of website commit fb1823aaa9c7;
 > - OpenCompact dd94c8395a81.
 >
-> Its lock manifest waives the rule that every pin is a release tag, so every `openspacehdl` command needs the
-> environment variable `OPENSPACEHDL_ALLOW_WAIVED=1` (Windows: `set OPENSPACEHDL_ALLOW_WAIVED=1`). It has no portal:
-> `openspacehdl serve` has nothing to serve. Install it with `pip install openspacehdl==0.1.0rc1`; pip skips
-> pre-releases, so `pip install openspacehdl` installs the latest final release. The formal 0.1.0 follows with the
-> released versions.
+> It is not published on PyPI. Install it from the wheel of the GitHub pre-release v0.1.0rc2:
+> `pip install openspacehdl-0.1.0rc2-py3-none-any.whl`. Its lock manifest waives the rule that every pin is a release
+> tag, so every `openspacehdl` command needs the environment variable `OPENSPACEHDL_ALLOW_WAIVED=1`: in cmd
+> `set OPENSPACEHDL_ALLOW_WAIVED=1`, in PowerShell `$env:OPENSPACEHDL_ALLOW_WAIVED = "1"`.
+>
+> Unlike 0.1.0rc1, it carries the portal: `openspacehdl serve` serves the website, the Composer with this catalog and
+> the documentation of every core at its pinned commit on `http://127.0.0.1:8765/`, also without network. The formal
+> 0.1.0 follows with the released versions; it is the first upload to PyPI.
 
 ## Install
 
