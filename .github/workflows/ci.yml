@@ -15,7 +15,7 @@ env:
   # The inputs of the lock manifest of the jobs package and systems (docs/design.md, section 3): the website commit of
   # the Composer catalog and a release tag of reference-systems. Until reference-systems has a release with the catalog
   # pins (open point O2), the lock waives L2, L3 and L4; such a manifest serves tests of the build only.
-  SITE_COMMIT: 60dee6c6a50f8c8f502f3b1d89306692ac662e79
+  SITE_COMMIT: 8a857dec3fe4987819a691ef2ba1e8da65ab05ef
   REFSYS_TAG: v0.1.0
 
 # A new head of a pull request cancels the run of the previous one
