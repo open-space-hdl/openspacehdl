@@ -131,9 +131,9 @@ def test_a_file_without_resolved_version_has_layout_1(tmp_path):
 
 
 def test_an_untested_generator_is_a_warning(tmp_path):
-    s = load(variant(tmp_path, lambda d: d["generator"].update(version="0.9.11-beta")))
-    assert s.warnings == ("the file was written by Composer generator 0.9.11-beta; this package was tested with "
-                          "0.9.7-beta, 0.9.8-beta, 0.9.9-beta, 0.9.10-beta",)
+    s = load(variant(tmp_path, lambda d: d["generator"].update(version="0.9.13-beta")))
+    assert s.warnings == ("the file was written by Composer generator 0.9.13-beta; this package was tested with "
+                          "0.9.7-beta, 0.9.8-beta, 0.9.9-beta, 0.9.10-beta, 0.9.11-beta, 0.9.12-beta",)
 
 
 def test_no_export(tmp_path):

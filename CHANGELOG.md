@@ -59,6 +59,8 @@ All notable changes of the package. Versions follow [semantic versioning](https:
 - Composer generator 0.9.9-beta (website 8fa23f0) is a tested generator: `new` reads its files without the warning
   of an untested generator version.
 - Composer generator 0.9.10-beta (website 60dee6c) is a tested generator, on the evidence of the CI job `systems`.
+- Composer generators 0.9.11-beta (website 8a857de) and 0.9.12-beta (website d736063, catalog 13caffc27875 with
+  OpenCompact v0.3.0) are tested generators, on the evidence of the CI job `systems`.
 - The SpaceFibre far end `osh_tb_spfi_far_end` joins its core and its adapter with the receiver reset signals of the
   `Phy` interface of OpenFibre v0.1.3, as the Composer export joins a system port, and keeps the settings of the
   standard. New rule L12: the lock refuses an OpenFibre older than v0.1.3.
