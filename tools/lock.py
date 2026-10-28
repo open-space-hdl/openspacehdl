@@ -23,7 +23,7 @@ manifest and schemas with the ones the inputs give. --report: print the violatio
 records it in the manifest; such a manifest serves tests of the build only and is never released. Exit status 0 on
 success, 1 on a violation or a difference, 2 on an error of the inputs.
 
-Needs PyYAML (development only; the package itself has no dependencies).
+Needs PyYAML (development only; not a dependency of the package).
 """
 
 from __future__ import annotations

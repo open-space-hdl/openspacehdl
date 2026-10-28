@@ -70,6 +70,10 @@ All notable changes of the package. Versions follow [semantic versioning](https:
   Logic FT, which strips its status badges itself.
 - The portal pins follow catalog 64a6eb49ec58 (OpenCompact v0.2.0): the documentation of OpenCompact builds with
   selectolax 1.0.0, its own pin.
+- The package depends on pytest (`pytest>=9.0,<10`; it had no dependencies): the hardware tests of the reference
+  systems run with it, so `pip install openspacehdl` brings what they need besides the software of the far end. The
+  deep install of `tools/check.py` takes the wheel and its dependencies from one directory, as a machine without
+  network does.
 
 ### Fixed
 

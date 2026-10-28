@@ -32,6 +32,11 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2025]
         python: ["3.10", "3.14"]
+        # the lab machine: its Python and its pytest, the lower bound of the dependency (docs/design.md, section 5.2)
+        include:
+          - os: windows-2025
+            python: "3.14.0"
+            pytest: "9.0.2"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -44,8 +49,23 @@ jobs:
         run: |
           python -m pip install -r requirements-dev.txt
           python -m pip install -e ".[vunit]"
+      - name: Install the pytest of the lab machine
+        if: matrix.pytest
+        run: python -m pip install "pytest==${{ matrix.pytest }}"
       - name: Gates (pytest, no em-dash)
         run: python tools/check.py --no-markdownlint
+      - name: Fresh install
+        # the package alone in a new virtual environment: pip resolves its dependency; a pytest installed before it
+        # that the range admits stays as it is
+        shell: bash
+        run: |
+          python -m venv ../fresh
+          if [ "$RUNNER_OS" = Windows ]; then py=../fresh/Scripts/python.exe; else py=../fresh/bin/python; fi
+          if [ -n "${{ matrix.pytest }}" ]; then "$py" -m pip install -q "pytest==${{ matrix.pytest }}"; fi
+          "$py" -m pip install -q .
+          "$py" -m pip check
+          "$py" -c "import openspacehdl, pytest; print('openspacehdl', openspacehdl.__version__, 'pytest', pytest.__version__)"
+          if [ -n "${{ matrix.pytest }}" ]; then "$py" -c "import pytest, sys; sys.exit(pytest.__version__ != '${{ matrix.pytest }}')"; fi
 
   linting:
     runs-on: ubuntu-24.04

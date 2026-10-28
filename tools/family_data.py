@@ -10,7 +10,7 @@ not public keeps its name, group, tagline and summary, without repository, links
 nothing; the exit status is 1 when they differ. A newer website commit with the same cards passes the check, and the
 file keeps the commit it was written from.
 
-Needs PyYAML (development only; the package itself has no dependencies).
+Needs PyYAML (development only; not a dependency of the package).
 """
 
 from __future__ import annotations
