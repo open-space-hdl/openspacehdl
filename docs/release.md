@@ -51,6 +51,7 @@ and 5.0 where a level uses VUnit:
 | Bench components | `python tests/hdl/run.py` with the installed wheel | every test passes, none skipped |
 | Systems | every system of the reference-systems release, with its committed export: `openspacehdl new`, `python sim/run.py "*.test_smoke" "*.test_streams"`, `openspacehdl update` (the examples of the Composer, with their export by `node tools/composer_hdl.mjs`, run in the CI job `systems`, level CI) | `new` writes the project without a warning; every test passes and none is skipped; `update` reports nothing to update and changes no file |
 | Portal | `openspacehdl serve --no-browser` from the installed wheel | the website, the Composer and its catalog, every documentation path of the catalog and the start page of every documentation site are served; scripts as `text/javascript` |
+| Lab | the offline install, `openspacehdl export <dir> --git`, then in `<dir>/reference-systems` the hardware test of every reference system that has one with `--help` and with `--model --profile sim` (for 0.1.0 `systems/spfi_compress/sw/hardware_test.py`), run with `python -s -B` | every command exits with 0; `reference-systems` is at the commit of the lock; `git status --porcelain --ignored` is empty in it and in every submodule |
 | CI | the workflow CI on the head of the release branch (open point O6): pytest on Linux and Windows, markdownlint, the family data, the exports, the bench components, and the systems level for every example of the Composer at the website commit of the lock | every job passes |
 | Linux | the offline install and one system of the systems level on Linux (WSL or a Linux machine) | as above |
 | Distribution | `twine check --strict` on every file to upload | passes |
@@ -81,6 +82,9 @@ point O9 of design.md, decided at the first content release.
 - Every file stays below the file limit of the project on PyPI (rule L9, 100 MB by default).
 - After the upload, the SHA-256 of every file on PyPI equals the local file, and fresh virtual environments of both
   Python versions install the version from PyPI and run `openspacehdl --version`, `info` and `lock`.
+- The Lab level runs once more on the version from PyPI: a fresh virtual environment, `pip install
+  openspacehdl==<version>`, then the export and the hardware test commands of section 3. This is the route of the
+  hardware tests; the run before the upload installs the built wheel without network.
 
 ## 6. After the release
 

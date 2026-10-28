@@ -51,9 +51,15 @@ All notable changes of the package. Versions follow [semantic versioning](https:
   with it. The licence expression gains `CC-BY-4.0`, `OFL-1.1` and `LicenseRef-OpenSpaceHDL-Logo`.
 - The optional dependency `openspacehdl[vunit]`: VUnit in a version the package is tested with
   (`vunit_hdl>=4.7.1,<5.1`; a development release of 5.0 named explicitly).
+- The README section "Hardware tests of the reference systems": the install of one version and `export --git`, from
+  which the procedure of each board target continues, and the install from a file on a machine without network.
+- The release level "Lab" (`docs/release.md`): the export and the hardware tests of the reference systems from the
+  installed wheel, before the upload and again from PyPI after it.
 
 ### Changed
 
+- The summary of the package and the first paragraph of the README describe the content of the package instead of
+  an early release that lists the family.
 - `tools/check.py --real-build --site-commit <rev>` builds the lock at that website revision, as a release needs it
   for rule L4 (the commit of `tools/composer_ref.txt` of its reference-systems tag); without it, `origin/main`.
 - Composer generator 0.9.9-beta (website 8fa23f0) is a tested generator: `new` reads its files without the warning
