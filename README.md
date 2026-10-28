@@ -12,8 +12,9 @@ cores or any tools yet.
 pip install openspacehdl
 ```
 
-The package needs Python 3.10 or later. Its one dependency is pytest (`pytest>=9.0,<10`), with which the hardware
-tests of the reference systems run. For a machine without network access, download the package with its
+The package needs Python 3.10 or later. Its dependencies are pytest (`pytest>=9.0,<10`) and pycryptodome
+(`pycryptodome>=3.23,<5`): the hardware tests of the reference systems run with pytest, and those of the systems
+with OpenCrypto also need pycryptodome. For a machine without network access, download the package with its
 dependencies on a machine with network access, the same Python version and the same operating system, copy the
 directory and install from it alone:
 

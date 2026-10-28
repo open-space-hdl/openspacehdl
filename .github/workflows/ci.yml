@@ -32,11 +32,19 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2025]
         python: ["3.10", "3.14"]
-        # the lab machine: its Python and its pytest, the lower bound of the dependency (docs/design.md, section 5.2)
+        # versions installed before the package (docs/design.md, section 5.2): the Python and the pytest of the lab
+        # machine with pycryptodome at the lower end of its range, and pycryptodome at the upper end
         include:
           - os: windows-2025
             python: "3.14.0"
             pytest: "9.0.2"
+            pycryptodome: "3.23.0"
+          - os: ubuntu-24.04
+            python: "3.10"
+            pycryptodome: "4.2.0"
+    env:
+      PIN_PYTEST: ${{ matrix.pytest }}
+      PIN_PYCRYPTODOME: ${{ matrix.pycryptodome }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -49,23 +57,31 @@ jobs:
         run: |
           python -m pip install -r requirements-dev.txt
           python -m pip install -e ".[vunit]"
-      - name: Install the pytest of the lab machine
-        if: matrix.pytest
-        run: python -m pip install "pytest==${{ matrix.pytest }}"
+      - name: Install the pinned versions of the dependencies
+        if: env.PIN_PYTEST != '' || env.PIN_PYCRYPTODOME != ''
+        shell: bash
+        run: |
+          pins=""
+          if [ -n "$PIN_PYTEST" ]; then pins="$pins pytest==$PIN_PYTEST"; fi
+          if [ -n "$PIN_PYCRYPTODOME" ]; then pins="$pins pycryptodome==$PIN_PYCRYPTODOME"; fi
+          python -m pip install $pins
       - name: Gates (pytest, no em-dash)
         run: python tools/check.py --no-markdownlint
       - name: Fresh install
-        # the package alone in a new virtual environment: pip resolves its dependency; a pytest installed before it
-        # that the range admits stays as it is
+        # the package alone in a new virtual environment: pip resolves its dependencies; the pinned versions,
+        # installed before it, stay as they are
         shell: bash
         run: |
           python -m venv ../fresh
           if [ "$RUNNER_OS" = Windows ]; then py=../fresh/Scripts/python.exe; else py=../fresh/bin/python; fi
-          if [ -n "${{ matrix.pytest }}" ]; then "$py" -m pip install -q "pytest==${{ matrix.pytest }}"; fi
+          pins=""
+          if [ -n "$PIN_PYTEST" ]; then pins="$pins pytest==$PIN_PYTEST"; fi
+          if [ -n "$PIN_PYCRYPTODOME" ]; then pins="$pins pycryptodome==$PIN_PYCRYPTODOME"; fi
+          if [ -n "$pins" ]; then "$py" -m pip install -q $pins; fi
           "$py" -m pip install -q .
           "$py" -m pip check
-          "$py" -c "import openspacehdl, pytest; print('openspacehdl', openspacehdl.__version__, 'pytest', pytest.__version__)"
-          if [ -n "${{ matrix.pytest }}" ]; then "$py" -c "import pytest, sys; sys.exit(pytest.__version__ != '${{ matrix.pytest }}')"; fi
+          "$py" -c "import openspacehdl, pytest, Crypto; print('openspacehdl', openspacehdl.__version__, 'pytest', pytest.__version__, 'pycryptodome', Crypto.__version__)"
+          "$py" -c "import os, sys, pytest, Crypto; sys.exit(any(p and p != v for p, v in ((os.environ['PIN_PYTEST'], pytest.__version__), (os.environ['PIN_PYCRYPTODOME'], Crypto.__version__))))"
 
   linting:
     runs-on: ubuntu-24.04
