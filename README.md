@@ -126,8 +126,8 @@ openspacehdl export <dir> --git
 ```
 
 `<dir>/reference-systems` then holds the reference systems at the release the package pins, with every core as a
-submodule at its pinned commit. The install brings pytest, with which the hardware tests run; the procedure of each
-board target continues from there, with the software of its far end, for example
+submodule at its pinned commit. The install brings pytest and pycryptodome, with which the hardware tests run;
+the procedure of each board target continues from there, with the software of its far end, for example
 `systems/spfi_compress/targets/vck190/docs/hardware_test.md`. Keep the output of `openspacehdl --version` and
 `<dir>/openspacehdl-lock.json` with the records of the test, outside the exported tree.
 
