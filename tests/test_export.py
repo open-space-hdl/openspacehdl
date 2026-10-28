@@ -129,6 +129,18 @@ def test_export_git(inst, package, tmp_path):
     assert (dest / "openspacehdl-lock.json").is_file()
 
 
+def test_export_git_into_a_relative_directory(inst, package, tmp_path, monkeypatch, capsys):
+    # git resolves the submodule URL of a neighbouring clone from reference-systems, not from the working directory
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["export", "--git", "export"]) == 0, capsys.readouterr().err
+    rs = tmp_path / "export" / "reference-systems"
+    status = git(rs, "submodule", "status").splitlines()
+    assert len(status) == 2 and not any(line.startswith(("+", "-", "U")) for line in status), status
+    assert git(rs / "cores" / "opencompact", "rev-parse", "HEAD") == package["world"]["ocp"]
+    assert git(rs / "cores" / "opencompact", "remote", "get-url", "origin") == \
+        "https://github.com/open-space-hdl/opencompact.git"
+
+
 def test_export_git_of_one_core(inst, tmp_path):
     dest = tmp_path / "export"
     assert export.export_git(dest, ["openwire"]) == ["open-logic-ft", "openwire"]

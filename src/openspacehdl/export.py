@@ -134,6 +134,9 @@ def export_git(dest: Path, cores: list[str] | None = None) -> list[str]:
     """Clones the repositories from their bundles; returns the exported directories."""
     inst = installed()
     ids = _selection(inst, cores)
+    # git resolves the URL of a submodule filled from a neighbouring clone from reference-systems, not from the
+    # working directory: the clones need absolute paths
+    dest = dest.absolute()
     _empty_target(dest)
     names = _names(inst)
     olo = dest / names["olo"]
