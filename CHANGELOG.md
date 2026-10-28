@@ -73,6 +73,8 @@ All notable changes of the package. Versions follow [semantic versioning](https:
 
 ### Fixed
 
+- `openspacehdl export --git` into a relative directory: the submodules of reference-systems are filled from the
+  neighbouring clones by absolute paths (git resolved the relative path from reference-systems and found no clone).
 - The UVVM snapshot follows the compile order of each component and carries the target-dependent files of the VVC
   framework (it had only the `src/` directories).
 
