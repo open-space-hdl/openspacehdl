@@ -12,11 +12,14 @@ cores or any tools yet.
 pip install openspacehdl
 ```
 
-The package needs Python 3.10 or later and has no dependencies. On a machine without network access, copy the wheel
-and install it from the file:
+The package needs Python 3.10 or later. Its one dependency is pytest (`pytest>=9.0,<10`), with which the hardware
+tests of the reference systems run. For a machine without network access, download the package with its
+dependencies on a machine with network access, the same Python version and the same operating system, copy the
+directory and install from it alone:
 
 ```shell
-pip install openspacehdl-<version>-py3-none-any.whl
+pip download openspacehdl==<version> -d wheels
+pip install --no-index --find-links wheels openspacehdl==<version>
 ```
 
 ## Use
@@ -84,7 +87,7 @@ Open Logic FT and UVVM at the pinned versions, their Git history, and the portal
 are not part of it.
 
 On a machine with network access, collect the wheels in one directory. VUnit is published as a source archive only;
-`pip wheel` takes the wheel of the package and builds one of VUnit, with its dependency:
+`pip wheel` takes the wheels of the package and of its dependencies and builds one of VUnit:
 
 ```shell
 pip wheel "openspacehdl[vunit]==<version>" -w wheels

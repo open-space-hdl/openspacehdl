@@ -292,6 +292,12 @@ vu.main()
 - The calls work with VUnit 4.7.1 from PyPI and with VUnit 5.0. VUnit is the optional dependency
   `openspacehdl[vunit]`, `vunit_hdl>=4.7.1,<5.1`: a release of the 5.0 development line comes with an explicit pin
   (`vunit_hdl==5.0.0.dev7`), because pip takes a development release only when it is named.
+- The package has one dependency, pytest (`pytest>=9.0,<10`). The hardware tests of the reference systems run with
+  pytest in the tree that `export --git` writes, and the lab installs one package: `pip install
+  openspacehdl==<version>` brings everything a hardware test needs besides the software of its far end. The range
+  admits pytest 9.0.2 of the lab machine, which pip then leaves installed; the workflow CI tests 9.0.2 and the
+  latest release of 9. The package itself does not import pytest. Decided at 0.1.0; up to then the package had no
+  dependencies.
 
 ### 5.3 Errors
 
@@ -643,7 +649,7 @@ leave the portal; the portal never rewrites the catalog, whose id is the hash of
 | Systems | Every example of the Composer (seven at the website commit of the lock) and the systems of the reference-systems release: `new`, then `python sim/run.py`, the smoke test and the stream test pass; `update` right after `new` changes nothing | GHDL through VUnit |
 | Exports | The exports of the examples come from `tools/composer_hdl.mjs` of the website at the commit of the lock; the CI checks with it that the stored exports are current (exit status 0) | Node.js, CI only |
 | Portal | `tools/portal.py` builds the website and every documentation site at the pins and passes L11 and the licence map; the installed package serves every site with `serve` | Ruby with Bundler, MkDocs |
-| Wheel | Build of wheel and sdist with the rules L7 (licences) and L8 (path budget), `twine check --strict`, install without network into fresh environments on Python 3.10 and 3.14, the commands run | pip, twine |
+| Wheel | Build of wheel and sdist with the rules L7 (licences) and L8 (path budget), `twine check --strict`, install without network from a directory with the wheel and its dependencies into fresh environments on Python 3.10 and 3.14, the commands run | pip, twine |
 | Deep install | On Windows, an install into a virtual environment whose `site-packages` path is 120 characters long; from there `add_core` of every core compiles in GHDL and one system passes its smoke test | pip, GHDL |
 | VUnit versions | The core and system levels with VUnit 4.7.1 and with VUnit 5.0 | VUnit |
 

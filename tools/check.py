@@ -118,9 +118,15 @@ def deep_install(args, wheel: Path, project: dict) -> int:
     venv = base / ("v" + "e" * (pad - 1))
     if venv.exists():
         _remove(venv)
+    wheels = base / "wheels"
+    if wheels.exists():
+        _remove(wheels)
     steps = [("deep venv", [str(args.deep_python), "-m", "venv", str(venv)])]
     vpy = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
-    steps.append(("deep wheel", [str(vpy), "-m", "pip", "install", "-q", "--no-index", str(wheel)]))
+    # the route of a machine without network: the wheel and its dependencies from one directory (README, Offline use)
+    steps.append(("deep download", [str(vpy), "-m", "pip", "download", "-q", "-d", str(wheels), str(wheel)]))
+    steps.append(("deep wheel", [str(vpy), "-m", "pip", "install", "-q", "--no-index", "--find-links", str(wheels),
+                                 str(wheel)]))
     for spec in args.vunit_install:
         steps.append(("deep vunit", [str(vpy), "-m", "pip", "install", "-q", *spec.split()]))
     for name, cmd in steps:

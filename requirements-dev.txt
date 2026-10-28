@@ -1,6 +1,6 @@
 build>=1.2
 jsonschema>=4.18
-pytest>=8
+pytest>=9.0,<10
 pyyaml>=6
 twine>=6
 tomli>=2; python_version < "3.11"
