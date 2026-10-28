@@ -126,15 +126,18 @@ openspacehdl export <dir> --git
 ```
 
 `<dir>/reference-systems` then holds the reference systems at the release the package pins, with every core as a
-submodule at its pinned commit. The procedure of each board target continues from there, for example
+submodule at its pinned commit. The install brings pytest, with which the hardware tests run; the procedure of each
+board target continues from there, with the software of its far end, for example
 `systems/spfi_compress/targets/vck190/docs/hardware_test.md`. Keep the output of `openspacehdl --version` and
 `<dir>/openspacehdl-lock.json` with the records of the test, outside the exported tree.
 
-A machine without network access installs the wheel from a file. Download it on another machine with
-`pip download openspacehdl==<version> --no-deps -d <download dir>`, compare its SHA-256 with the one on the GitHub
-release of the version (`certutil -hashfile <file> SHA256` in cmd, `Get-FileHash <file> -Algorithm SHA256` in
-PowerShell, `sha256sum <file>` on Linux), copy it, and install it with `pip install --no-index <file>`. The export
-is the same.
+A machine without network access installs the package from a directory of wheels. Download the package with its
+dependencies on a machine with network access, the same Python version and the same operating system, with
+`pip download openspacehdl==<version> -d <download dir>`. Compare the SHA-256 of
+`openspacehdl-<version>-py3-none-any.whl` with the one on the GitHub release of the version
+(`certutil -hashfile <file> SHA256` in cmd, `Get-FileHash <file> -Algorithm SHA256` in PowerShell,
+`sha256sum <file>` on Linux), copy the directory, and install from it alone with
+`pip install --no-index --find-links <download dir> openspacehdl==<version>`. The export is the same.
 
 ## Development
 
