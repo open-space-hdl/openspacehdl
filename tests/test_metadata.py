@@ -1,4 +1,5 @@
-"""Tests of the package metadata in pyproject.toml: the dependency on pytest and the optional dependency on VUnit."""
+"""Tests of the package metadata in pyproject.toml: the dependencies on pytest and pycryptodome and the optional
+dependency on VUnit."""
 
 from pathlib import Path
 
@@ -18,9 +19,9 @@ def project() -> dict:
         return tomllib.load(f)["project"]
 
 
-def pytest_dependency() -> Requirement:
-    (req,) = (Requirement(r) for r in project()["dependencies"])
-    return req
+def dependencies() -> dict[str, Requirement]:
+    reqs = [Requirement(r) for r in project()["dependencies"]]
+    return {r.name: r for r in reqs}
 
 
 def vunit_extra() -> Requirement:
@@ -30,9 +31,10 @@ def vunit_extra() -> Requirement:
     return req
 
 
-def test_the_only_dependency_is_pytest():
-    req = pytest_dependency()
-    assert req.name == "pytest" and not req.extras and req.marker is None
+def test_the_dependencies_are_pytest_and_pycryptodome():
+    deps = dependencies()
+    assert list(deps) == ["pytest", "pycryptodome"]
+    assert all(not r.extras and r.marker is None for r in deps.values())
 
 
 @pytest.mark.parametrize("version,allowed", [
@@ -43,7 +45,18 @@ def test_the_only_dependency_is_pytest():
     ("10.0.0", False),      # not tested
 ])
 def test_the_pytest_dependency_admits_the_tested_versions(version, allowed):
-    assert pytest_dependency().specifier.contains(version) is allowed
+    assert dependencies()["pytest"].specifier.contains(version) is allowed
+
+
+@pytest.mark.parametrize("version,allowed", [
+    ("3.23.0", True),       # the two ends reference-systems tests and the workflow CI installs
+    ("4.2.0", True),
+    ("3.24.1", True),
+    ("3.22.0", False),
+    ("5.0.0", False),       # not tested
+])
+def test_the_pycryptodome_dependency_admits_the_tested_versions(version, allowed):
+    assert dependencies()["pycryptodome"].specifier.contains(version) is allowed
 
 
 def test_the_vunit_extra_names_vunit_hdl():

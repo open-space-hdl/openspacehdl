@@ -10,9 +10,10 @@ readme = "README.md"
 license = "MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0 AND CC-BY-4.0 AND OFL-1.1 AND LicenseRef-OpenSpaceHDL-Logo"
 license-files = ["LICENSE", "src/openspacehdl/licenses/*.txt", "src/openspacehdl/licenses/*.md"]
 requires-python = ">=3.10"
-# the hardware tests of the reference systems run with pytest; the range admits the pytest of the lab machine
+# the hardware tests of the reference systems run with pytest, those of the systems with OpenCrypto also need
+# pycryptodome; the ranges cover the pytest of the lab machine and the versions reference-systems tests
 # (docs/design.md, section 5.2)
-dependencies = ["pytest>=9.0,<10"]
+dependencies = ["pytest>=9.0,<10", "pycryptodome>=3.23,<5"]
 authors = [{ name = "Julian Schneider", email = "julian.schneider@openspacehdl.org" }]
 keywords = ["vhdl", "fpga", "ip-core", "space", "spacewire", "spacefibre", "ccsds", "ecss"]
 classifiers = [

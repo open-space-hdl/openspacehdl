@@ -292,12 +292,15 @@ vu.main()
 - The calls work with VUnit 4.7.1 from PyPI and with VUnit 5.0. VUnit is the optional dependency
   `openspacehdl[vunit]`, `vunit_hdl>=4.7.1,<5.1`: a release of the 5.0 development line comes with an explicit pin
   (`vunit_hdl==5.0.0.dev7`), because pip takes a development release only when it is named.
-- The package has one dependency, pytest (`pytest>=9.0,<10`). The hardware tests of the reference systems run with
-  pytest in the tree that `export --git` writes, and the lab installs one package: `pip install
-  openspacehdl==<version>` brings everything a hardware test needs besides the software of its far end. The range
-  admits pytest 9.0.2 of the lab machine, which pip then leaves installed; the workflow CI tests 9.0.2 and the
-  latest release of 9. The package itself does not import pytest. Decided at 0.1.0; up to then the package had no
-  dependencies.
+- The package has two dependencies, pytest (`pytest>=9.0,<10`) and pycryptodome (`pycryptodome>=3.23,<5`). The
+  hardware tests of the reference systems run with pytest in the tree that `export --git` writes, and those of the
+  systems with OpenCrypto compute their reference data with pycryptodome. The lab installs one package:
+  `pip install openspacehdl==<version>` brings everything a hardware test needs besides the software of its far end.
+  The range of pytest admits pytest 9.0.2 of the lab machine, which pip then leaves installed; reference-systems
+  tests pycryptodome 3.23.0 and 4.2.0, the two ends of its range (its tests use AES in GCM mode only, the same in
+  both majors). The workflow CI installs these versions before the package, and the latest releases in the ranges.
+  The package itself imports neither.
+  Decided at 0.1.0 (pytest first, then pycryptodome); up to then the package had no dependencies.
 
 ### 5.3 Errors
 
