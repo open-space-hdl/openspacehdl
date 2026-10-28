@@ -54,7 +54,7 @@ and 5.0 where a level uses VUnit:
 | Lab | the offline install, `openspacehdl export <dir> --git`, then in `<dir>/reference-systems` the hardware test of every reference system that has one with `--help` and with `--model --profile sim` (for 0.1.0 `systems/spfi_compress/sw/hardware_test.py`), run with `python -s -B` | every command exits with 0; `reference-systems` is at the commit of the lock; `git status --porcelain --ignored` is empty in it and in every submodule |
 | CI | the workflow CI on the head of the release branch (open point O6): pytest on Linux and Windows, markdownlint, the family data, the exports, the bench components, and the systems level for every example of the Composer at the website commit of the lock | every job passes |
 | Linux | the offline install and one system of the systems level on Linux (WSL or a Linux machine) | as above |
-| Distribution | `twine check --strict` on every file to upload | passes |
+| Distribution | `twine check --strict` on the wheel to upload | passes |
 
 The test case `test_image_stream` is not part of the systems level: one image takes hours in GHDL, as the README of a
 generated project states.
@@ -67,20 +67,21 @@ documentation keeps the evidence.
 1. A pull request from `release/<version>` to `main` carries the evidence of section 3; the maintainer merges it.
 2. The maintainer sets the annotated tag `v<version>` on the merge commit. Its tree equals the head of the evidence
    (`git diff --quiet <head> v<version>`).
-3. The files to upload are built from a clean clone of the tag with `tools/check.py --real-build` as in section 3. The
+3. The wheel to upload is built from a clean clone of the tag with `tools/check.py --real-build` as in section 3. The
    wheel check, the offline install and the portal level run again on that wheel.
 
-The source distribution of a version with content carries the snapshots, the bundles and the portal like the wheel
-(48.8 MiB at website 8fa23f0 and reference-systems v0.1.0). Whether a release uploads it beside the wheel is open
-point O9 of design.md, decided at the first content release.
+A release uploads the wheel only (open point O9 of design.md). The source distribution would carry the snapshots,
+the bundles and the portal like the wheel (48.8 MiB at website 8fa23f0 and reference-systems v0.1.0) and count a
+second time against the storage limit of the project on PyPI. The wheel is `py3-none-any` and installs on every
+platform; the source of the package is its tagged repository.
 
 ## 5. Upload
 
-- The maintainer uploads the files with twine from their own terminal, with a token scoped to the project. The token
+- The maintainer uploads the wheel with twine from their own terminal, with a token scoped to the project. The token
   is entered only there. Publishing through GitHub Actions with Trusted Publishing comes later, with a publishing
   workflow and the trusted publisher on PyPI set up by the maintainer.
-- Every file stays below the file limit of the project on PyPI (rule L9, 100 MB by default).
-- After the upload, the SHA-256 of every file on PyPI equals the local file, and fresh virtual environments of both
+- The wheel stays below the file limit of the project on PyPI (rule L9, 100 MB by default).
+- After the upload, the SHA-256 of the wheel on PyPI equals the local file, and fresh virtual environments of both
   Python versions install the version from PyPI and run `openspacehdl --version`, `info` and `lock`.
 - The Lab level runs once more on the version from PyPI: a fresh virtual environment, `pip install
   openspacehdl==<version>`, then the export and the hardware test commands of section 3. This is the route of the

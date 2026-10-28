@@ -17,7 +17,7 @@ dependencies = ["pytest>=9.0,<10", "pycryptodome>=3.23,<5"]
 authors = [{ name = "Julian Schneider", email = "julian.schneider@openspacehdl.org" }]
 keywords = ["vhdl", "fpga", "ip-core", "space", "spacewire", "spacefibre", "ccsds", "ecss"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
