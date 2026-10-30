@@ -1,6 +1,6 @@
 """Open Space HDL: open-source VHDL IP cores for spacecraft on-board data handling."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.0rc3"
 
 from openspacehdl.errors import LockError, OshError  # noqa: E402
 from openspacehdl.vunit import (  # noqa: E402

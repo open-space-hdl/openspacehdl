@@ -3,6 +3,17 @@
 Python package of [Open Space HDL](https://openspacehdl.org), a family of open-source VHDL IP cores for spacecraft
 on-board data handling.
 
+> **0.1.0rc3 is a preliminary build** for the hardware tests of the spfi_compress reference system. reference-systems
+> is at the development commit 8b9daa7b6d84, with the hardware test as its procedure describes it; every other pin is
+> a release.
+>
+> It is not published on PyPI. Install it from the wheel of the GitHub pre-release v0.1.0rc3:
+> `pip install openspacehdl-0.1.0rc3-py3-none-any.whl` (pip takes its dependencies pytest and pycryptodome from
+> PyPI). Its lock manifest waives the rule that every pin is a release tag, so every `openspacehdl` command needs the
+> environment variable `OPENSPACEHDL_ALLOW_WAIVED=1`: in cmd `set OPENSPACEHDL_ALLOW_WAIVED=1`, in PowerShell
+> `$env:OPENSPACEHDL_ALLOW_WAIVED = "1"`. The formal 0.1.0 follows with the release of reference-systems; it is the
+> first upload to PyPI.
+
 The package carries the cores of the family with Open Logic FT and UVVM, at the versions its lock manifest pins and
 with their Git history, and adds them to VUnit projects. It writes simulation projects for systems of the Open Space
 Composer, exports the reference systems for their hardware tests, and serves the website, the Composer and the
