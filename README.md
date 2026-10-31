@@ -3,8 +3,10 @@
 Python package of [Open Space HDL](https://openspacehdl.org), a family of open-source VHDL IP cores for spacecraft
 on-board data handling.
 
-This is an early release. It lists the projects of the family as the website shows them; it does not contain the
-cores or any tools yet.
+The package carries the cores of the family with Open Logic FT and UVVM, at the versions its lock manifest pins and
+with their Git history, and adds them to VUnit projects. It writes simulation projects for systems of the Open Space
+Composer, exports the reference systems for their hardware tests, and serves the website, the Composer and the
+documentation as an offline portal. The one wheel holds all of it, so it works without network as well.
 
 ## Install
 
@@ -36,9 +38,9 @@ openspacehdl info OpenFibre     # one project, by name or repository name
 The list comes from the project cards of [openspacehdl.org](https://openspacehdl.org) at the time of the release.
 A project that is not yet public is listed as "Coming soon", without links.
 
-## VUnit (from the first version with cores)
+## VUnit
 
-A version with cores carries them with Open Logic FT and UVVM at the versions its lock manifest pins
+The package carries the cores with Open Logic FT and UVVM at the versions its lock manifest pins
 (`openspacehdl lock` shows them), and adds them to a VUnit project. The optional dependency `vunit` installs VUnit
 with it, in a version the package is tested with (4.7.1 up to the 5.0 line):
 
@@ -81,10 +83,10 @@ the versions the package pins, on `http://127.0.0.1:8765/`, also without network
 `--no-browser` does not open the browser). The Composer keeps its workspace in the browser storage of that address:
 on another port, and on openspacehdl.org, it starts with an empty one, and a saved file moves the work.
 
-## Offline use (from the first version with cores)
+## Offline use
 
-A version with cores brings what a machine without network access needs in its one wheel: the sources of the cores,
-Open Logic FT and UVVM at the pinned versions, their Git history, and the portal with the Composer. VUnit and GHDL
+The one wheel brings what a machine without network access needs: the sources of the cores, Open Logic FT and UVVM
+at the pinned versions, their Git history, and the portal with the Composer. VUnit and GHDL
 are not part of it.
 
 On a machine with network access, collect the wheels in one directory. VUnit is published as a source archive only;
@@ -113,6 +115,29 @@ Install GHDL on that machine as well and put it on the `PATH`, where VUnit finds
 The Composer of the portal uses the block catalog of the website commit the package pins, so a system saved with it
 has the pins of the package and `new` accepts it. A system saved on openspacehdl.org after a newer release of a core
 may pin other versions; `new` then refuses it and names the package version whose pins match, if one is known.
+
+## Hardware tests of the reference systems
+
+The reference systems are tested on their boards from the sources of one package version. In a virtual environment:
+
+```shell
+pip install openspacehdl==<version>
+openspacehdl export <dir> --git
+```
+
+`<dir>/reference-systems` then holds the reference systems at the release the package pins, with every core as a
+submodule at its pinned commit. The install brings pytest and pycryptodome, with which the hardware tests run;
+the procedure of each board target continues from there, with the software of its far end, for example
+`systems/spfi_compress/targets/vck190/docs/hardware_test.md`. Keep the output of `openspacehdl --version` and
+`<dir>/openspacehdl-lock.json` with the records of the test, outside the exported tree.
+
+A machine without network access installs the package from a directory of wheels. Download the package with its
+dependencies on a machine with network access, the same Python version and the same operating system, with
+`pip download openspacehdl==<version> -d <download dir>`. Compare the SHA-256 of
+`openspacehdl-<version>-py3-none-any.whl` with the one on the GitHub release of the version
+(`certutil -hashfile <file> SHA256` in cmd, `Get-FileHash <file> -Algorithm SHA256` in PowerShell,
+`sha256sum <file>` on Linux), copy the directory, and install from it alone with
+`pip install --no-index --find-links <download dir> openspacehdl==<version>`. The export is the same.
 
 ## Development
 

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "openspacehdl"
 dynamic = ["version"]
-description = "Open Space HDL, open-source VHDL IP cores for spacecraft on-board data handling: early release that lists the family"
+description = "Open Space HDL, open-source VHDL IP cores for spacecraft on-board data handling: the cores with Open Logic FT and UVVM for VUnit, system projects from the Composer, and an offline portal"
 readme = "README.md"
 license = "MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0 AND CC-BY-4.0 AND OFL-1.1 AND LicenseRef-OpenSpaceHDL-Logo"
 license-files = ["LICENSE", "src/openspacehdl/licenses/*.txt", "src/openspacehdl/licenses/*.md"]
@@ -17,7 +17,7 @@ dependencies = ["pytest>=9.0,<10", "pycryptodome>=3.23,<5"]
 authors = [{ name = "Julian Schneider", email = "julian.schneider@openspacehdl.org" }]
 keywords = ["vhdl", "fpga", "ip-core", "space", "spacewire", "spacefibre", "ccsds", "ecss"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
