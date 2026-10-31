@@ -13,10 +13,10 @@ permissions:
 
 env:
   # The inputs of the lock manifest of the jobs package and systems (docs/design.md, section 3): the website commit of
-  # the Composer catalog and a release tag of reference-systems. Until reference-systems has a release with the catalog
-  # pins (open point O2), the lock waives L2, L3 and L4; such a manifest serves tests of the build only.
+  # the Composer catalog and a release tag of reference-systems whose tools/composer_ref.txt names that commit; the
+  # lock waives no rule.
   SITE_COMMIT: d7360631661d0ab382f65a729982332e16665320
-  REFSYS_TAG: v0.1.0
+  REFSYS_TAG: v0.2.0
 
 # A new head of a pull request cancels the run of the previous one
 concurrency:
@@ -177,8 +177,8 @@ jobs:
           git -C ../in/uvvm fetch -q --depth 1 https://github.com/UVVM/UVVM "$uvvm"
       - name: Lock manifest and source snapshots
         run: |
-          python tools/lock.py --site ../in/site --site-commit "$SITE_COMMIT" --refsys ../in/repos/reference-systems --refsys-tag "$REFSYS_TAG" --repos ../in/repos --uvvm ../in/uvvm --waive L2 --waive L3 --waive L4
-          python tools/snapshot.py --repos ../in/repos --refsys ../in/repos/reference-systems --uvvm ../in/uvvm --allow-waived
+          python tools/lock.py --site ../in/site --site-commit "$SITE_COMMIT" --refsys ../in/repos/reference-systems --refsys-tag "$REFSYS_TAG" --repos ../in/repos --uvvm ../in/uvvm
+          python tools/snapshot.py --repos ../in/repos --refsys ../in/repos/reference-systems --uvvm ../in/uvvm
       - name: Wheel
         run: python -m build --wheel --outdir dist
       - name: Publish the wheel
@@ -195,8 +195,6 @@ jobs:
       fail-fast: false
       matrix:
         vunit: ["4.7.1", "5.0.0.dev7"]
-    env:
-      OPENSPACEHDL_ALLOW_WAIVED: "1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -240,8 +238,6 @@ jobs:
       fail-fast: false
       matrix:
         vunit: ["4.7.1", "5.0.0.dev7"]
-    env:
-      OPENSPACEHDL_ALLOW_WAIVED: "1"
     steps:
       - name: Set up Python
         uses: actions/setup-python@v7
