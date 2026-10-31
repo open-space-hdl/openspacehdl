@@ -11,8 +11,8 @@ section 3). A release branch starts only when:
 
 - every repository the catalog pins is at a published release tag (rule L1);
 - reference-systems has a release tag whose submodules carry the catalog pins (rule L2) and whose
-  `tools/composer_ref.txt` names the website commit of the lock (rule L4). For 0.1.0 this is the reference-systems
-  release after the OpenFibre release and the catalog pin it waits for (open point O2);
+  `tools/composer_ref.txt` names the website commit of the lock (rule L4). For 0.1.0 this is reference-systems
+  v0.2.0 (open point O2);
 - `python tools/lock.py --site <website> --site-commit <commit of composer_ref.txt> --refsys <reference-systems>
   --refsys-tag <tag> --repos <dir> --report` lists no violation, with clones that have the tags of their remotes;
 - the generator version of the Composer at that website commit is in `TESTED_GENERATORS`
