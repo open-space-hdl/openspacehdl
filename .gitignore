@@ -8,3 +8,10 @@ venv*/
 # Build output
 build/
 dist/
+# Source snapshots, written by tools/snapshot.py from the lock manifest
+src/openspacehdl/hdl/
+# Git bundles, written by tools/snapshot.py from the lock manifest
+src/openspacehdl/bundles/
+# Portal and its manifest, written by tools/portal.py
+src/openspacehdl/portal/
+src/openspacehdl/data/portal.json

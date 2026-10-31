@@ -6,10 +6,11 @@ not public keeps its name, group, tagline and summary, without repository, links
 
     python tools/family_data.py --site <clone of the website> [--commit <rev>] [--check]
 
---commit defaults to origin/main. --check compares the file with what the commit gives and writes nothing; the exit
-status is 1 when they differ.
+--commit defaults to origin/main. --check compares the cards in the file with the cards at the commit and writes
+nothing; the exit status is 1 when they differ. A newer website commit with the same cards passes the check, and the
+file keeps the commit it was written from.
 
-Needs PyYAML (development only; the package itself has no dependencies).
+Needs PyYAML (development only; not a dependency of the package).
 """
 
 from __future__ import annotations
@@ -72,18 +73,22 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--site", type=Path, required=True, help="clone of the website repository")
     parser.add_argument("--commit", default="origin/main", help="revision of the website (default origin/main)")
     parser.add_argument("--check", action="store_true", help="compare only, write nothing")
+    parser.add_argument("--out", type=Path, default=OUT, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
-    text = json.dumps(build(args.site, args.commit), indent=2, ensure_ascii=False) + "\n"
+    data = build(args.site, args.commit)
     if args.check:
-        current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
-        if current != text:
-            print(f"{OUT.relative_to(ROOT)} differs from {args.commit} of the website", file=sys.stderr)
+        current = json.loads(args.out.read_text(encoding="utf-8")) if args.out.exists() else {}
+        recorded = current.get("source", {}).get("commit")
+        if recorded:
+            data["source"]["commit"] = recorded
+        if current != data:
+            print(f"{args.out.name}: the cards at {args.commit} of the website differ", file=sys.stderr)
             return 1
-        print(f"{OUT.relative_to(ROOT)} is current")
+        print(f"{args.out.name} is current: the cards at {args.commit} equal those of {str(recorded)[:7]}")
         return 0
-    OUT.write_text(text, encoding="utf-8", newline="\n")
-    print(f"wrote {OUT.relative_to(ROOT)}")
+    args.out.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {args.out}")
     return 0
 
 

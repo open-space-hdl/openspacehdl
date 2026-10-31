@@ -5,15 +5,19 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "openspacehdl"
 dynamic = ["version"]
-description = "Open Space HDL, open-source VHDL IP cores for spacecraft on-board data handling: early release that lists the family"
+description = "Open Space HDL, open-source VHDL IP cores for spacecraft on-board data handling: the cores with Open Logic FT and UVVM for VUnit, system projects from the Composer, and an offline portal"
 readme = "README.md"
-license = "MIT"
-license-files = ["LICENSE"]
+license = "MIT AND LicenseRef-PSI-HDL-1.0 AND Apache-2.0 AND CC-BY-4.0 AND OFL-1.1 AND LicenseRef-OpenSpaceHDL-Logo"
+license-files = ["LICENSE", "src/openspacehdl/licenses/*.txt", "src/openspacehdl/licenses/*.md"]
 requires-python = ">=3.10"
+# the hardware tests of the reference systems run with pytest, those of the systems with OpenCrypto also need
+# pycryptodome; the ranges cover the pytest of the lab machine and the versions reference-systems tests
+# (docs/design.md, section 5.2)
+dependencies = ["pytest>=9.0,<10", "pycryptodome>=3.23,<5"]
 authors = [{ name = "Julian Schneider", email = "julian.schneider@openspacehdl.org" }]
 keywords = ["vhdl", "fpga", "ip-core", "space", "spacewire", "spacefibre", "ccsds", "ecss"]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
@@ -28,8 +32,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
 ]
 
+[project.optional-dependencies]
+# the VUnit versions the package is tested with: 4.7.1 and the 5.0 line (a development release with an explicit pin)
+vunit = ["vunit_hdl>=4.7.1,<5.1"]
+
 [project.urls]
 Homepage = "https://openspacehdl.org"
+Repository = "https://github.com/open-space-hdl/openspacehdl"
 
 [project.scripts]
 openspacehdl = "openspacehdl.cli:main"
@@ -38,7 +47,15 @@ openspacehdl = "openspacehdl.cli:main"
 version = { attr = "openspacehdl.__version__" }
 
 [tool.setuptools.package-data]
-openspacehdl = ["data/*.json"]
+openspacehdl = ["data/*.json", "data/schema/*.json", "licenses/*", "templates/*", "osh_tb/*.vhd","hdl/**/*", "bundles/*.bundle",
+                "portal/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Limits of the wheel (docs/design.md, rules L8 and L9): the longest path in the wheel stays below path-limit
+# minus install-prefix characters, the wheel below the PyPI file limit of the project.
+[tool.openspacehdl]
+path-limit = 260
+install-prefix = 120
+pypi-file-limit-mb = 100

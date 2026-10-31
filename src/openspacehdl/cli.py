@@ -7,6 +7,8 @@ import sys
 import textwrap
 
 from openspacehdl import __version__
+from openspacehdl import lock as _lock
+from openspacehdl.errors import LockError
 from openspacehdl.family import Family, Project, load
 
 WIDTH = 100
@@ -56,6 +58,25 @@ def info(family: Family, name: str | None) -> int:
     return 0
 
 
+def show_lock() -> int:
+    try:
+        lk = _lock.load()
+    except LockError as e:
+        print(f"openspacehdl: {e}", file=sys.stderr)
+        return 1
+    print(f"openspacehdl {lk.package}")
+    print(f"  website {lk.website_commit[:10]}, catalog {lk.catalog}, Composer generator {lk.generator}")
+    print(f"  reference-systems {lk.refsys_tag} ({lk.refsys_commit[:10]})")
+    print(f"  Open Logic FT {lk.olo_tag} ({lk.olo_commit[:10]}), library {lk.olo_library}")
+    print(f"  UVVM {lk.uvvm_commit[:10]}")
+    for c in lk.cores:
+        note = f", verified with Open Logic FT {c.verified_with}" if c.verified_with else ""
+        print(f"  {c.name} {c.tag} ({c.commit[:10]}), library {c.library}, TRL {c.trl}{note}")
+    if lk.waived:
+        print(f"  waived rules: {', '.join(lk.waived)} (a test build, not a release)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
@@ -67,9 +88,47 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     p_info = sub.add_parser("info", help="list the projects of the family, as the website shows them")
     p_info.add_argument("project", nargs="?", help="show only this project (name or repository)")
+    sub.add_parser("lock", help="show the cores, Open Logic FT and UVVM this package version pins")
+    p_export = sub.add_parser("export", help="write the sources as a plain tree, or as Git repositories (--git)")
+    p_export.add_argument("dir", help="target directory, new or empty")
+    p_export.add_argument("--git", action="store_true", help="Git clones with their history, from the bundles")
+    p_export.add_argument("--core", action="append", metavar="CORE",
+                          help="export only this core and Open Logic FT (repeatable)")
+    p_new = sub.add_parser("new", help="write the project of a system saved by the Composer")
+    p_new.add_argument("system", help="the saved system, <system>.composer.json")
+    p_new.add_argument("dir", nargs="?", help="target directory, new or empty (default: ./<system>)")
+    p_new.add_argument("--hdl", help="directory of the export (default: hdl/ next to the file, or its directory)")
+    p_update = sub.add_parser("update", help="regenerate the generated files of a project")
+    p_update.add_argument("dir", nargs="?", help="the project (default: the current directory)")
+    p_update.add_argument("--from", dest="source", help="a new saved system to copy into the project first")
+    p_update.add_argument("--hdl", help="directory of the export of --from")
+    p_update.add_argument("--dry-run", action="store_true", help="list what update would do, change nothing")
+    p_update.add_argument("--restore", action="store_true", help="write generated files that were deleted")
+    p_serve = sub.add_parser("serve", help="serve the website, the documentation and the Composer on 127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8765,
+                         help="port (default 8765; the Composer workspace belongs to the port)")
+    p_serve.add_argument("--no-browser", action="store_true", help="do not open the browser")
     args = parser.parse_args(argv)
 
     if args.command == "info":
         return info(load(), args.project)
+    if args.command == "lock":
+        return show_lock()
+    if args.command == "export":
+        from openspacehdl import export
+
+        return export.main(args.dir, args.core, args.git)
+    if args.command == "new":
+        from openspacehdl import project
+
+        return project.main_new(args.system, args.dir, args.hdl)
+    if args.command == "update":
+        from openspacehdl import project
+
+        return project.main_update(args.dir, args.source, args.hdl, args.dry_run, args.restore)
+    if args.command == "serve":
+        from openspacehdl import serve
+
+        return serve.main(args.port, not args.no_browser)
     parser.print_help()
     return 0

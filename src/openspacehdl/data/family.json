@@ -1,7 +1,7 @@
 {
   "source": {
     "repository": "open-space-hdl/open-space-hdl.github.io",
-    "commit": "1b3d619cb4b4cef3fe7a3893a0d0040c1d4049bb"
+    "commit": "60dee6c6a50f8c8f502f3b1d89306692ac662e79"
   },
   "site": "https://openspacehdl.org",
   "github": "https://github.com/open-space-hdl",
@@ -86,8 +86,12 @@
       "tagline": [
         "ECSS-E-ST-50-15C"
       ],
-      "summary": "CAN network core with nominal and redundant bus, bus redundancy management, CANopen services and time distribution.",
-      "public": false
+      "summary": "CAN network core with nominal and redundant bus, bus redundancy management, the application layer services of CiA 301 and time distribution.",
+      "public": true,
+      "repo": "opencan",
+      "docs": true,
+      "trl": 3,
+      "trl_status": "Fully verified by simulation. Not yet tested on hardware, no flight heritage."
     },
     {
       "name": "Open1553",

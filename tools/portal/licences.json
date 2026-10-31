@@ -1,0 +1,62 @@
+{
+  "comment": [
+    "Licence map of the portal (docs/design.md, section 4.4), read by tools/portal.py.",
+    "website and docs: [pattern, licence] in order; the first pattern that matches the path of a file in its site",
+    "decides (fnmatch, * also matches /); null stops the build (an unknown file in a place of third-party files);",
+    "{core} is the licence of the repository of a documentation site. The website follows the section Licences of",
+    "its README; the documentation sites the licence files of the theme packages and the notices inside their files.",
+    "texts: licence files of the sites and of the theme packages (glob in site-packages) -> their copy in",
+    "src/openspacehdl/licenses/, which they must equal byte for byte."
+  ],
+  "website": [
+    ["assets/img/logo-horizontal-inverse.svg", "LicenseRef-OpenSpaceHDL-Logo"],
+    ["assets/img/social-preview.png", "LicenseRef-OpenSpaceHDL-Logo"],
+    ["favicon.svg", "LicenseRef-OpenSpaceHDL-Logo"],
+    ["favicon.ico", "LicenseRef-OpenSpaceHDL-Logo"],
+    ["apple-touch-icon.png", "LicenseRef-OpenSpaceHDL-Logo"],
+    ["assets/img/*", "CC-BY-4.0"],
+    ["assets/fonts/*", "OFL-1.1"],
+    ["assets/composer/*", "MIT"],
+    ["assets/css/*", "MIT"],
+    ["assets/*", null],
+    ["composer/schema/*", "MIT"],
+    ["*.html", "MIT AND CC-BY-4.0"],
+    ["LICENSE", "MIT"],
+    ["LICENSE-CONTENT", "CC-BY-4.0"]
+  ],
+  "docs": [
+    ["assets/images/logo.svg", "LicenseRef-OpenSpaceHDL-Logo"],
+    ["assets/images/favicon.svg", "LicenseRef-OpenSpaceHDL-Logo"],
+    ["assets/images/*", "{core}"],
+    ["assets/fonts/*", "OFL-1.1"],
+    ["assets/stylesheets/brand.css", "{core}"],
+    ["assets/javascripts/glightbox.min.js", "MIT"],
+    ["assets/stylesheets/glightbox.min.css", "MIT"],
+    ["assets/javascripts/bundle.*.min.js", "MIT"],
+    ["assets/javascripts/workers/search.*.min.js", "MIT"],
+    ["assets/stylesheets/main.*.min.css", "MIT"],
+    ["assets/stylesheets/palette.*.min.css", "MIT"],
+    ["assets/*", null],
+    ["*.html", "{core} AND CC-BY-4.0 AND Apache-2.0"],
+    ["*", "{core}"]
+  ],
+  "texts": {
+    "website": {
+      "LICENSE": "MIT-website.txt",
+      "LICENSE-CONTENT": "CC-BY-4.0.txt",
+      "assets/fonts/Sora-OFL.txt": "OFL-1.1-Sora.txt",
+      "assets/fonts/JetBrainsMono-OFL.txt": "OFL-1.1-JetBrainsMono.txt"
+    },
+    "docs": {
+      "assets/fonts/Sora-OFL.txt": "OFL-1.1-Sora.txt",
+      "assets/fonts/JetBrainsMono-OFL.txt": "OFL-1.1-JetBrainsMono.txt"
+    },
+    "packages": {
+      "mkdocs_material-*.dist-info/licenses/LICENSE": "MIT-mkdocs-material.txt",
+      "material/templates/.icons/fontawesome/LICENSE.txt": "FontAwesome-Free.txt",
+      "material/templates/.icons/material/LICENSE": "Pictogrammers-Free.txt",
+      "mkdocs_glightbox-*.dist-info/licenses/LICENSE": "MIT-mkdocs-glightbox.txt",
+      "mkdocs_glightbox/glightbox/LICENSE.md": "MIT-glightbox.md"
+    }
+  }
+}

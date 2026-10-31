@@ -1,0 +1,317 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The inputs of the lock manifest of the jobs package and systems (docs/design.md, section 3): the website commit of
+  # the Composer catalog and a release tag of reference-systems whose tools/composer_ref.txt names that commit; the
+  # lock waives no rule.
+  SITE_COMMIT: d7360631661d0ab382f65a729982332e16665320
+  REFSYS_TAG: v0.2.0
+
+# A new head of a pull request cancels the run of the previous one
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025]
+        python: ["3.10", "3.14"]
+        # versions installed before the package (docs/design.md, section 5.2): the Python and the pytest of the lab
+        # machine with pycryptodome at the lower end of its range, and pycryptodome at the upper end
+        include:
+          - os: windows-2025
+            python: "3.14.0"
+            pytest: "9.0.2"
+            pycryptodome: "3.23.0"
+          - os: ubuntu-24.04
+            python: "3.10"
+            pycryptodome: "4.2.0"
+    env:
+      PIN_PYTEST: ${{ matrix.pytest }}
+      PIN_PYCRYPTODOME: ${{ matrix.pycryptodome }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install Python packages
+        # the package with its optional dependency vunit (pip takes VUnit 4.7.1)
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install -e ".[vunit]"
+      - name: Install the pinned versions of the dependencies
+        if: env.PIN_PYTEST != '' || env.PIN_PYCRYPTODOME != ''
+        shell: bash
+        run: |
+          pins=""
+          if [ -n "$PIN_PYTEST" ]; then pins="$pins pytest==$PIN_PYTEST"; fi
+          if [ -n "$PIN_PYCRYPTODOME" ]; then pins="$pins pycryptodome==$PIN_PYCRYPTODOME"; fi
+          python -m pip install $pins
+      - name: Gates (pytest, no em-dash)
+        run: python tools/check.py --no-markdownlint
+      - name: Fresh install
+        # the package alone in a new virtual environment: pip resolves its dependencies; the pinned versions,
+        # installed before it, stay as they are
+        shell: bash
+        run: |
+          python -m venv ../fresh
+          if [ "$RUNNER_OS" = Windows ]; then py=../fresh/Scripts/python.exe; else py=../fresh/bin/python; fi
+          pins=""
+          if [ -n "$PIN_PYTEST" ]; then pins="$pins pytest==$PIN_PYTEST"; fi
+          if [ -n "$PIN_PYCRYPTODOME" ]; then pins="$pins pycryptodome==$PIN_PYCRYPTODOME"; fi
+          if [ -n "$pins" ]; then "$py" -m pip install -q $pins; fi
+          "$py" -m pip install -q .
+          "$py" -m pip check
+          "$py" -c "import openspacehdl, pytest, Crypto; print('openspacehdl', openspacehdl.__version__, 'pytest', pytest.__version__, 'pycryptodome', Crypto.__version__)"
+          "$py" -c "import os, sys, pytest, Crypto; sys.exit(any(p and p != v for p, v in ((os.environ['PIN_PYTEST'], pytest.__version__), (os.environ['PIN_PYCRYPTODOME'], Crypto.__version__))))"
+
+  linting:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Markdown lint
+        uses: DavidAnson/markdownlint-cli2-action@v24
+        with:
+          config: .markdownlint.json
+          globs: |
+            *.md
+            docs/**/*.md
+
+  family-data:
+    # Compares src/openspacehdl/data/family.json with the project cards of the website as they are now
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Python packages
+        run: python -m pip install -r requirements-dev.txt
+      - name: Clone of the website
+        run: git clone -q --filter=blob:none https://github.com/open-space-hdl/open-space-hdl.github.io ../site
+      - name: Family data up to date
+        run: python tools/family_data.py --site ../site --check
+
+  exports:
+    # The fixtures of tests/fixtures/composer are the files of the website commit they come from, and their stored
+    # exports are those of tools/composer_hdl.mjs of that commit (docs/design.md, section 9)
+    runs-on: ubuntu-24.04
+    env:
+      FIXTURE_COMMIT: 8fa23f0fade85d22af337efff48ae021136ff9fb
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Website at the commit of the fixtures
+        run: |
+          git init -q ../site
+          git -C ../site fetch -q --depth 1 https://github.com/open-space-hdl/open-space-hdl.github.io "$FIXTURE_COMMIT"
+          git -C ../site checkout -q FETCH_HEAD
+      - name: Stored exports up to date
+        shell: bash
+        run: |
+          fx="$GITHUB_WORKSPACE/tests/fixtures/composer"
+          for s in system-1 system-2; do
+            cmp "../site/composer/schema/$s.json" "$fx/schema/$s.json"
+          done
+          for d in "$fx"/*/; do
+            n=$(basename "$d")
+            [ "$n" = schema ] && continue
+            cmp "../site/assets/composer/examples/$n.composer.json" "$fx/$n/$n.composer.json"
+            (cd ../site && node tools/composer_hdl.mjs "$fx/$n/$n.composer.json" "$RUNNER_TEMP/exports/$n")
+            diff -r "$RUNNER_TEMP/exports/$n" "$fx/$n/hdl"
+            echo "$n: the stored export is current"
+          done
+
+  package:
+    # The package with the source snapshots and the Git bundles of the lock at SITE_COMMIT and REFSYS_TAG (no portal):
+    # the wheel the jobs bench-components and systems install
+    name: Package with snapshots
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Python packages
+        run: python -m pip install -r requirements-dev.txt
+      - name: Clones of the lock inputs
+        # the website at the commit of the catalog; every repository of the catalog and reference-systems with their
+        # history and tags (for the Git bundles), Open Logic FT with its submodule; UVVM at the commit the cores pin
+        shell: bash
+        run: |
+          mkdir -p ../in/repos
+          git init -q ../in/site
+          git -C ../in/site fetch -q --depth 1 https://github.com/open-space-hdl/open-space-hdl.github.io "$SITE_COMMIT"
+          git -C ../in/site show "$SITE_COMMIT:assets/composer/catalog.json" > ../in/catalog.json
+          for repo in $(python -c "import json; print(' '.join(s['repo'] for s in json.load(open('../in/catalog.json', encoding='utf-8'))['sources']))"); do
+            git clone -q "https://github.com/open-space-hdl/$repo" "../in/repos/$repo"
+          done
+          git clone -q https://github.com/open-space-hdl/reference-systems ../in/repos/reference-systems
+          git -C ../in/repos/open-logic-ft submodule update -q --init 3rdParty/en_cl_fix
+          read -r core commit < <(python -c "import json; s = [x for x in json.load(open('../in/catalog.json', encoding='utf-8'))['sources'] if x['id'] != 'olo'][0]; print(s['repo'], s['commit'])")
+          uvvm=$(git -C "../in/repos/$core" rev-parse "$commit:uvvm")
+          git init -q ../in/uvvm
+          git -C ../in/uvvm fetch -q --depth 1 https://github.com/UVVM/UVVM "$uvvm"
+      - name: Lock manifest and source snapshots
+        run: |
+          python tools/lock.py --site ../in/site --site-commit "$SITE_COMMIT" --refsys ../in/repos/reference-systems --refsys-tag "$REFSYS_TAG" --repos ../in/repos --uvvm ../in/uvvm
+          python tools/snapshot.py --repos ../in/repos --refsys ../in/repos/reference-systems --uvvm ../in/uvvm
+      - name: Wheel
+        run: python -m build --wheel --outdir dist
+      - name: Publish the wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-wheel
+          path: dist/*.whl
+
+  bench-components:
+    name: Bench components (GHDL, VUnit ${{ matrix.vunit }})
+    needs: package
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        vunit: ["4.7.1", "5.0.0.dev7"]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Wheel of the job package
+        uses: actions/download-artifact@v7
+        with:
+          name: package-wheel
+          path: ../wheel
+      - name: Install Python packages
+        # vunit_hdl 5.0.0.dev7 is an sdist whose build needs pkg_resources (setuptools < 81)
+        run: |
+          python -m pip install "setuptools<81" wheel "setuptools_scm>=8"
+          python -m pip install --no-build-isolation "vunit_hdl==${{ matrix.vunit }}"
+          python -m pip install --no-deps ../wheel/*.whl
+      - name: Set up GHDL
+        uses: ghdl/setup-ghdl@v1
+        with:
+          version: latest
+          backend: mcode
+      - name: Bench components
+        run: python tests/hdl/run.py -p 4 --xunit-xml results.xml --no-color
+      - name: Publish test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-results-vunit-${{ matrix.vunit }}
+          path: results.xml
+
+  systems:
+    # Every Composer example of SITE_COMMIT with its export by tools/composer_hdl.mjs of that commit: openspacehdl new,
+    # the smoke and the stream tests of the generated project in GHDL, and update right after them, which must change
+    # nothing (the systems level of docs/design.md, section 9; test_image_stream takes hours and is not run)
+    name: Systems (GHDL, VUnit ${{ matrix.vunit }})
+    needs: package
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        vunit: ["4.7.1", "5.0.0.dev7"]
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Wheel of the job package
+        uses: actions/download-artifact@v7
+        with:
+          name: package-wheel
+          path: ../wheel
+      - name: Install Python packages
+        # vunit_hdl 5.0.0.dev7 is an sdist whose build needs pkg_resources (setuptools < 81)
+        run: |
+          python -m pip install "setuptools<81" wheel "setuptools_scm>=8"
+          python -m pip install --no-build-isolation "vunit_hdl==${{ matrix.vunit }}"
+          python -m pip install --no-deps ../wheel/*.whl
+      - name: Set up GHDL
+        uses: ghdl/setup-ghdl@v1
+        with:
+          version: latest
+          backend: mcode
+      - name: Website at the commit of the lock
+        run: |
+          git init -q ../site
+          git -C ../site fetch -q --depth 1 https://github.com/open-space-hdl/open-space-hdl.github.io "$SITE_COMMIT"
+          git -C ../site checkout -q FETCH_HEAD
+      - name: Systems
+        shell: bash
+        run: |
+          set -u
+          site=$(cd ../site && pwd)
+          out="$RUNNER_TEMP/systems"
+          mkdir -p "$out"
+          fail=0
+          files() { (cd "$1" && find . -type f -not -path './vunit_out/*' -not -name results.xml -print0 | sort -z | xargs -0 sha256sum); }
+          for f in "$site"/assets/composer/examples/*.composer.json; do
+            n=$(basename "$f" .composer.json)
+            in="$out/in/$n"
+            proj="$out/projects/$n"
+            mkdir -p "$in"
+            cp "$f" "$in/"
+            if ! (cd "$site" && node tools/composer_hdl.mjs "$in/$n.composer.json" "$in/hdl") > "$out/$n.export.log" 2>&1; then
+              echo "::error::$n: the export failed"; cat "$out/$n.export.log"; fail=1; continue
+            fi
+            if ! openspacehdl new "$in/$n.composer.json" "$proj" > "$out/$n.new.log" 2>&1; then
+              echo "::error::$n: new failed"; cat "$out/$n.new.log"; fail=1; continue
+            fi
+            if ! (cd "$proj" && python sim/run.py -p 2 --no-color -x results.xml "*.test_smoke" "*.test_streams") > "$out/$n.run.log" 2>&1; then
+              echo "::error::$n: a test failed"; tail -n 60 "$out/$n.run.log"; fail=1; continue
+            fi
+            before=$(files "$proj")
+            # the warnings of update go to stderr; its report on stdout must be "nothing to update"
+            if ! openspacehdl update "$proj" > "$out/$n.update.log" 2> "$out/$n.update.err" || [ "$(cat "$out/$n.update.log")" != "nothing to update" ]; then
+              echo "::error::$n: update did not report nothing to update"; cat "$out/$n.update.log" "$out/$n.update.err"; fail=1; continue
+            fi
+            if [ "$(files "$proj")" != "$before" ]; then
+              echo "::error::$n: update changed a file"; fail=1; continue
+            fi
+            echo "$n: $(grep -E '^(pass|fail) [0-9]+ of [0-9]+' "$out/$n.run.log" | tail -n 1); update: nothing to update"
+          done
+          exit $fail
+      - name: No warning of an untested generator
+        # a generator version joins TESTED_GENERATORS after this job passed with its files
+        shell: bash
+        run: |
+          if grep -H "this package was tested with" "$RUNNER_TEMP"/systems/*.new.log; then
+            echo "::error::new warns of a generator version the package was not tested with"
+            exit 1
+          fi
+      - name: Publish the results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: systems-results-vunit-${{ matrix.vunit }}
+          path: |
+            ${{ runner.temp }}/systems/*.log
+            ${{ runner.temp }}/systems/projects/*/results.xml
