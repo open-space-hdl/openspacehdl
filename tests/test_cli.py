@@ -38,8 +38,22 @@ def test_version(capsys):
     assert capsys.readouterr().out.strip() == f"openspacehdl {__version__}"
 
 
+VERSION = re.compile(r"\d+\.\d+\.\d+(rc\d+)?")  # a release X.Y.Z or its release candidate X.Y.ZrcN (PEP 440)
+
+
 def test_version_is_semantic():
-    assert re.fullmatch(r"\d+\.\d+\.\d+", __version__)
+    assert VERSION.fullmatch(__version__)
+
+
+@pytest.mark.parametrize("version", ["0.1.0", "0.1.0rc3", "10.20.30rc12"])
+def test_version_pattern_accepts(version):
+    assert VERSION.fullmatch(version)
+
+
+@pytest.mark.parametrize("version", ["0.1", "0.1.0.dev1", "0.1.0a1", "0.1.0b2", "0.1.0rc", "0.1.0-rc1", "0.1.0.rc1",
+                                     "0.1.0.post1", "0.1.0.dev1+lab1"])
+def test_version_pattern_rejects(version):
+    assert not VERSION.fullmatch(version)
 
 
 def test_python_m():
