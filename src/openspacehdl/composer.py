@@ -2,14 +2,15 @@
 
 A system file (<system>.composer.json) is accepted only when
 
-- it is valid against the published schema of its formatVersion (system-1 or system-2, at the website commit of the
-  lock manifest);
+- it is valid against the published schema of its formatVersion (system-1, system-2 or system-3, at the website
+  commit of the lock manifest);
 - it has its resolved netlist, without problems, and no check of severity error (the rule of Export HDL);
 - the layout of the resolved netlist (resolved.version; a file without it has layout 1) is one the package knows;
 - its export (the HDL files of Export HDL) belongs to it: the header of <entity>_compile_order.txt names the SHA-256
   of the file;
 - every source of its compile order has the commit (Open Logic FT: the tag) of the lock manifest;
-- every external interface has a type the generator has a bench component for.
+- every external interface has a type the generator has a bench component for;
+- every reset group (formatVersion 3) is in the resolved netlist with the same source, and the other way round.
 
 A generator version the package was not tested with gives a warning, not a refusal.
 """
@@ -26,6 +27,7 @@ from pathlib import Path
 from openspacehdl import jsonschema
 from openspacehdl.errors import OshError
 
+FORMAT_VERSIONS = (1, 2, 3)
 KNOWN_LAYOUTS = (1,)
 TESTED_GENERATORS = ("0.9.7-beta", "0.9.8-beta", "0.9.9-beta", "0.9.10-beta", "0.9.11-beta", "0.9.12-beta")
 # (type, role) of the external interfaces the generated testbench supports; every stream type is supported as a
@@ -68,6 +70,20 @@ class Interface:
 
 
 @dataclass(frozen=True)
+class ResetGroup:
+    """A reset group (formatVersion 3): the reset output source (<instance>.<interface>) resets the members (instance
+    IDs) instead of the reset generator of their domain; from the resolved netlist the signal of the source, its clock
+    domain and every reset port it drives (<instance>.<port>), the members first, then the inserted blocks that join."""
+
+    id: str
+    source: str
+    members: tuple[str, ...]
+    signal: str
+    domain: str
+    ports: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class System:
     path: Path
     hdl: Path
@@ -79,6 +95,7 @@ class System:
     resets: tuple[Port, ...]
     interfaces: tuple[Interface, ...]
     warnings: tuple[str, ...] = field(default_factory=tuple)
+    reset_groups: tuple[ResetGroup, ...] = field(default_factory=tuple)
 
 
 def schema(format_version: int, directory: Path | None = None) -> dict:
@@ -132,6 +149,23 @@ def _port(p: dict) -> Port:
     return Port(p["name"], p["dir"], p["type"], p["kind"], p.get("domain"), p.get("signal"))
 
 
+def _reset_groups(data: dict, reasons: list[str]) -> list[ResetGroup]:
+    resolved = {g.get("group"): g for g in data["resolved"].get("resetGroups", [])}
+    out = []
+    for g in data.get("resetGroups", []):
+        r = resolved.pop(g["id"], None)
+        if r is None or r.get("source") != g["source"]:
+            reasons.append(f"the reset group {g['id']} ({g['source']}) is not in the resolved netlist with this source; "
+                           f"save the system in the Composer")
+            continue
+        out.append(ResetGroup(g["id"], g["source"], tuple(g["members"]), r.get("output", ""), r.get("domain", ""),
+                              tuple(r.get("ports", []))))
+    for name in resolved:
+        reasons.append(f"the resolved netlist has the reset group {name}, which the system does not define; save the "
+                       f"system in the Composer")
+    return out
+
+
 def _check_pins(data: dict, lock, reasons: list[str]) -> None:
     cores = {c.library: c for c in lock.cores}
     for c in data["resolved"].get("compile", []):
@@ -163,9 +197,15 @@ def load(path: Path, *, hdl: Path | None = None, lock=None, schema_dir: Path | N
     reasons: list[str] = []
     warnings: list[str] = []
     version = data.get("formatVersion") if isinstance(data, dict) else None
-    if version not in (1, 2):
-        raise ComposerError(path, [f"unknown formatVersion {version!r}; the package reads 1 and 2"])
-    reasons += [f"schema system-{version}: {e}" for e in jsonschema.validate(data, schema(version, schema_dir))]
+    if version not in FORMAT_VERSIONS:
+        raise ComposerError(path, [f"unknown formatVersion {version!r}; the package reads 1, 2 and 3"])
+    try:
+        published = schema(version, schema_dir)
+    except OshError:
+        raise ComposerError(path, [f"formatVersion {version} needs the schema system-{version}.json, which this "
+                                   f"package does not carry (the website commit of its lock manifest predates it)"]
+                            ) from None
+    reasons += [f"schema system-{version}: {e}" for e in jsonschema.validate(data, published)]
     r = data.get("resolved")
     if r is None:
         reasons.append("the file has no resolved netlist; save the system in the Composer")
@@ -199,9 +239,10 @@ def load(path: Path, *, hdl: Path | None = None, lock=None, schema_dir: Path | N
         lock = load_lock()
     _check_pins(data, lock, reasons)
     interfaces = _interfaces(data, reasons)
+    groups = _reset_groups(data, reasons)
     if reasons:
         raise ComposerError(path, reasons)
     ports = [_port(p) for p in r["ports"]]
     return System(path, export, entity, data, layout, generator,
                   tuple(p for p in ports if p.kind == "clock"), tuple(p for p in ports if p.kind == "reset"),
-                  tuple(interfaces), tuple(warnings))
+                  tuple(interfaces), tuple(warnings), tuple(groups))

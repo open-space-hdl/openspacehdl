@@ -15,8 +15,8 @@ also asks the remote of every repository (git ls-remote) which tags are publishe
 The manifest also lists every file of the source snapshots with its SHA-256 (rule L6), selected as tools/snapshot.py
 selects them, and the refs of the Git bundle of every repository (tools/bundles.py); UVVM is read from --uvvm, by
 default the uvvm submodule of the first core clone that has the commit. The Composer schemas of the website commit
-(composer/schema/system-1.json and system-2.json) go to src/openspacehdl/data/schema/, their SHA-256 into the
-manifest.
+(composer/schema/system-1.json, system-2.json and every further system-<n>.json the commit has, such as system-3.json
+from Composer 0.10.0-beta on) go to src/openspacehdl/data/schema/, their SHA-256 into the manifest.
 
 Default: write the manifest and the schemas; nothing is written when a rule fails. --check: compare the committed
 manifest and schemas with the ones the inputs give. --report: print the violations only. --waive <rule> accepts the violations of a rule and
@@ -52,7 +52,8 @@ OUT = ROOT / "src" / "openspacehdl" / "data" / "lock.json"
 GENERATOR = re.compile(r"export const GENERATOR = \{ name: '[^']*', version: '([^']+)' \}")
 OLO_SUBMODULES = ("3rdParty/en_cl_fix",)
 SCHEMA_DIR = "composer/schema"
-SCHEMAS = ("system-1.json", "system-2.json")
+SCHEMAS = ("system-1.json", "system-2.json")  # required; a further system-<n>.json is taken when the commit has it
+SCHEMA_NAME = re.compile(r"system-(\d+)\.json")
 
 
 class InputError(Exception):
@@ -74,8 +75,11 @@ def show(repo: Path, rev: str, path: str) -> str | None:
 
 def schema_texts(site: Path, rev: str) -> dict[str, bytes]:
     """The Composer schemas of the website at rev, byte for byte: file name -> content."""
+    r = subprocess.run(["git", "-C", str(site), "ls-tree", "--name-only", f"{rev}:{SCHEMA_DIR}"], capture_output=True,
+                       text=True)
+    found = {n for n in r.stdout.split() if SCHEMA_NAME.fullmatch(n)} if r.returncode == 0 else set()
     out = {}
-    for name in SCHEMAS:
+    for name in sorted(set(SCHEMAS) | found, key=lambda n: int(SCHEMA_NAME.fullmatch(n).group(1))):
         r = subprocess.run(["git", "-C", str(site), "show", f"{rev}:{SCHEMA_DIR}/{name}"], capture_output=True)
         if r.returncode != 0:
             raise InputError(f"website {rev[:7]} has no {SCHEMA_DIR}/{name}")

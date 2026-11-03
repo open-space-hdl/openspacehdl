@@ -56,7 +56,7 @@ at the build of the package and never edited by hand.
 | --- | --- |
 | `format`, `version` | `openspacehdl-lock`, format version 1 |
 | `package` | Version of the package |
-| `website` | Commit of the website repository, the catalog ID of its `assets/composer/catalog.json`, the generator version of its Composer and the SHA-256 of its Composer schemas (`composer/schema/system-1.json`, `system-2.json`) |
+| `website` | Commit of the website repository, the catalog ID of its `assets/composer/catalog.json`, the generator version of its Composer and the SHA-256 of its Composer schemas (`composer/schema/system-1.json`, `system-2.json` and every further `system-<n>.json` of the commit, such as `system-3.json` from Composer 0.10.0-beta on) |
 | `referenceSystems` | Release tag of open-space-hdl/reference-systems and its commit |
 | `openLogic` | The one Open Logic FT of this version: tag, commit, library `olo`, the commit of its submodule `3rdParty/en_cl_fix` |
 | `uvvm` | UVVM commit and the components the system testbenches use |
@@ -133,7 +133,7 @@ openspacehdl/
     project.py                          new, update
     export.py, serve.py
     data/lock.json, data/family.json
-    data/schema/system-1.json, system-2.json      Composer schemas at the website commit of the lock
+    data/schema/system-<n>.json         Composer schemas at the website commit of the lock
     data/portal.json                    inputs, SHA-256 and licence of every file of the portal (section 8)
     templates/                          templates of the generated project (MIT)
     hdl/<id>/...                        source snapshots of the cores, Open Logic FT and reference-systems
@@ -321,9 +321,14 @@ Every error is an `openspacehdl.OshError` with a message that says what to do:
 is taken from `--hdl`, else from `hdl/` next to the file, else from the directory of the file. `new` refuses, with
 the reason, when:
 
-- the file fails the published schema of its `formatVersion` (system-1 or system-2, stored in the package). The
-  package checks it with its own validator of the JSON Schema 2020-12 keywords these schemas use
+- the file has a `formatVersion` other than 1, 2 or 3 (3: a system with reset groups, Composer 0.10.0-beta), or the
+  package does not carry the schema of its version (a package whose website commit predates it);
+- the file fails the published schema of its `formatVersion` (system-1, system-2 or system-3, stored in the package).
+  The package checks it with its own validator of the JSON Schema 2020-12 keywords these schemas use
   (`openspacehdl.jsonschema`), so it needs no dependency; a keyword it does not know is an error of the schema;
+- a reset group of `resetGroups` is not in `resolved.resetGroups` with the same source, or `resolved.resetGroups`
+  has a group the file does not define. The checked system carries the reset groups (`System.reset_groups`: source,
+  members, the signal and clock domain of the source and the reset ports it drives);
 - the file has no `resolved` part, `resolved.problems` is not empty, or `checks` has an entry of severity `error`
   (the rule of Export HDL);
 - `resolved.version` is unknown to the package. The Composer writes it as the first key of `resolved` from generator
@@ -375,7 +380,8 @@ The harness `<system>_th.vhd` instantiates the system, the UVVM engine and, for 
 - a clock generator for every port of kind `clock`, with the period derived from `frequencyHz` of its clock domain,
   and for the reference clock pin of a SpaceFibre adapter, with the frequency of the adapter's lane clock;
 - the reset for the port of kind `reset` (asynchronous, high-active), driven by the testbench (`osh_reset`, 16 cycles
-  of the slowest clock);
+  of the slowest clock). A reset group stays inside the system: its source follows the system reset and resets its
+  members; the header of the harness names every group with its source, clock domain and members;
 - a bench component of the library `osh_tb` for every external interface, chosen by the interface type. The type
   comes from `port.interface` through `resolved.instances[].block` to `catalogSubset.blocks[].interfaces[]`; the
   clock of a VVC is the clock port of the system behind the clock of the interface.
