@@ -115,30 +115,38 @@ jobs:
 
   exports:
     # The fixtures of tests/fixtures/composer are the files of the website commit they come from, and their stored
-    # exports are those of tools/composer_hdl.mjs of that commit (docs/design.md, section 9)
+    # exports are those of tools/composer_hdl.mjs of that commit (docs/design.md, section 9): FIXTURE_COMMIT for
+    # system-1, system-2 and the examples of formatVersion 1, FIXTURE_COMMIT_3 for system-3 and the example with a
+    # reset group (Composer 0.10.0-beta)
     runs-on: ubuntu-24.04
     env:
       FIXTURE_COMMIT: 8fa23f0fade85d22af337efff48ae021136ff9fb
+      FIXTURE_COMMIT_3: c22696378bace56097b6daa58e2c1caa334aba27
+      FIXTURES_3: spw_compression_node_pipeline_reset
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
-      - name: Website at the commit of the fixtures
+      - name: Website at the commits of the fixtures
         run: |
-          git init -q ../site
-          git -C ../site fetch -q --depth 1 https://github.com/open-space-hdl/open-space-hdl.github.io "$FIXTURE_COMMIT"
-          git -C ../site checkout -q FETCH_HEAD
+          for site in "site:$FIXTURE_COMMIT" "site3:$FIXTURE_COMMIT_3"; do
+            git init -q "../${site%%:*}"
+            git -C "../${site%%:*}" fetch -q --depth 1 https://github.com/open-space-hdl/open-space-hdl.github.io "${site#*:}"
+            git -C "../${site%%:*}" checkout -q FETCH_HEAD
+          done
       - name: Stored exports up to date
         shell: bash
         run: |
           fx="$GITHUB_WORKSPACE/tests/fixtures/composer"
-          for s in system-1 system-2; do
-            cmp "../site/composer/schema/$s.json" "$fx/schema/$s.json"
+          for s in site:system-1 site:system-2 site3:system-3; do
+            cmp "../${s%%:*}/composer/schema/${s#*:}.json" "$fx/schema/${s#*:}.json"
           done
           for d in "$fx"/*/; do
             n=$(basename "$d")
             [ "$n" = schema ] && continue
-            cmp "../site/assets/composer/examples/$n.composer.json" "$fx/$n/$n.composer.json"
-            (cd ../site && node tools/composer_hdl.mjs "$fx/$n/$n.composer.json" "$RUNNER_TEMP/exports/$n")
+            site=../site
+            case " $FIXTURES_3 " in *" $n "*) site=../site3 ;; esac
+            cmp "$site/assets/composer/examples/$n.composer.json" "$fx/$n/$n.composer.json"
+            (cd "$site" && node tools/composer_hdl.mjs "$fx/$n/$n.composer.json" "$RUNNER_TEMP/exports/$n")
             diff -r "$RUNNER_TEMP/exports/$n" "$fx/$n/hdl"
             echo "$n: the stored export is current"
           done

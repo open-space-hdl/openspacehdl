@@ -70,6 +70,15 @@ def test_check_compares_the_schemas(world, capsys):
     assert "schema/system-2.json differs from the inputs" in capsys.readouterr().err
 
 
+def test_a_further_schema_of_the_website_is_taken(world):
+    commit(world["site"], {"composer/schema/system-3.json": "{}\n"})
+    # the new website commit is not the one reference-systems was checked against (L4)
+    assert load_tool().main(args(world, "--waive", "L4")) == 0
+    m = json.loads((world["tmp"] / "lock.json").read_text(encoding="utf-8"))
+    assert sorted(m["website"]["schemas"]) == ["system-1.json", "system-2.json", "system-3.json"]
+    assert (world["tmp"] / "schema" / "system-3.json").read_bytes() == b"{}\n"
+
+
 def test_a_website_without_a_schema_is_an_input_error(world, capsys):
     git(world["site"], "rm", "-q", "composer/schema/system-2.json")
     git(world["site"], "commit", "-q", "-m", "no schema")

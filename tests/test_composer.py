@@ -15,6 +15,9 @@ FIX = Path(__file__).resolve().parent / "fixtures" / "composer"
 SCHEMAS = FIX / "schema"
 EXAMPLE = FIX / "spw_rmap_node" / "spw_rmap_node.composer.json"
 DATA = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+# formatVersion 3: a system with a reset group (Composer 0.10.0-beta)
+V3 = FIX / "spw_compression_node_pipeline_reset" / "spw_compression_node_pipeline_reset.composer.json"
+DATA3 = json.loads(V3.read_text(encoding="utf-8"))
 
 
 def lock_for(data=DATA, **change):
@@ -38,18 +41,18 @@ def lock_for(data=DATA, **change):
 
 
 def load(path=EXAMPLE, **kw):
-    return composer.load(path, lock=kw.pop("lock", None) or lock_for(), schema_dir=SCHEMAS, **kw)
+    return composer.load(path, lock=kw.pop("lock", None) or lock_for(), schema_dir=kw.pop("schema_dir", SCHEMAS), **kw)
 
 
-def variant(tmp_path, mutate, keep_sha=False):
-    """A copy of the example with mutate applied, and its export; the header names the new SHA-256 unless keep_sha."""
-    data = copy.deepcopy(DATA)
+def variant(tmp_path, mutate, keep_sha=False, source=EXAMPLE):
+    """A copy of source with mutate applied, and its export; the header names the new SHA-256 unless keep_sha."""
+    data = json.loads(source.read_text(encoding="utf-8"))
     mutate(data)
-    target = tmp_path / "spw_rmap_node.composer.json"
+    target = tmp_path / source.name
     target.write_text(json.dumps(data, indent=1), encoding="utf-8")
-    shutil.copytree(EXAMPLE.parent / "hdl", tmp_path / "hdl")
+    shutil.copytree(source.parent / "hdl", tmp_path / "hdl")
     if not keep_sha:
-        order = tmp_path / "hdl" / "spw_rmap_node_compile_order.txt"
+        order = tmp_path / "hdl" / f"{source.name.removesuffix('.composer.json')}_compile_order.txt"
         digest = hashlib.sha256(target.read_bytes()).hexdigest()
         text = re.sub(r"(# SHA-256 of .*: )[0-9a-f]{64}", lambda m: m.group(1) + digest,
                       order.read_text(encoding="utf-8"))
@@ -73,6 +76,7 @@ def test_the_example_is_accepted():
                      ("rmap0.M_Axi", "axi4", "master"), ("spw0.Spw", "spw.ds", "pins")}
     axi = next(i for i in s.interfaces if i.endpoint == "rmap0.M_Axi")
     assert axi.block == "openrmap/omap_core" and axi.kind == "bus" and len(axi.ports) > 10
+    assert s.reset_groups == ()
 
 
 def test_the_export_next_to_the_file(tmp_path):
@@ -95,9 +99,83 @@ def test_not_json(tmp_path):
     assert reasons(f)[0].startswith("not a JSON file")
 
 
-def test_an_unknown_format_version(tmp_path):
-    assert reasons(variant(tmp_path, lambda d: d.update(formatVersion=3))) == [
-        "unknown formatVersion 3; the package reads 1 and 2"]
+@pytest.mark.parametrize("version", [0, 4, 5, "3", None])
+def test_an_unknown_format_version(tmp_path, version):
+    assert reasons(variant(tmp_path, lambda d: d.update(formatVersion=version))) == [
+        f"unknown formatVersion {version!r}; the package reads 1, 2 and 3"]
+
+
+# formatVersion 3: reset groups
+
+def load3(path=V3, **kw):
+    return load(path, lock=kw.pop("lock", None) or lock_for(DATA3), **kw)
+
+
+def reasons3(path, **kw):
+    with pytest.raises(composer.ComposerError) as e:
+        load3(path, **kw)
+    return e.value.reasons
+
+
+def test_a_version_3_file_is_accepted():
+    s = load3()
+    assert s.entity == "spw_compression_node_pipeline_reset" and s.layout == 1 and s.generator == "0.10.0-beta"
+    assert s.hdl == V3.parent / "hdl"
+    assert s.reset_groups == (composer.ResetGroup(
+        "pipe", "prst0.RstOut", ("och0", "frm0", "ocr0"), "prst0_RstOut_s", "sys", ("och0.Rst", "frm0.Rst", "ocr0.Rst")),)
+    assert ("prst0.S_AxiLite", "axi4lite", "slave") in {(i.endpoint, i.type, i.role) for i in s.interfaces}
+
+
+def test_a_version_3_file_without_a_reset_group(tmp_path):
+    assert reasons3(variant(tmp_path, lambda d: d.pop("resetGroups"), source=V3)) == [
+        "schema system-3: (root): the key 'resetGroups' is missing",
+        "the resolved netlist has the reset group pipe, which the system does not define; save the system in the "
+        "Composer"]
+
+
+def test_reset_groups_in_a_version_2_file(tmp_path):
+    r = reasons3(variant(tmp_path, lambda d: d.update(formatVersion=2), source=V3))
+    assert "schema system-2: (root): unknown key 'resetGroups'" in r
+
+
+def test_a_member_named_twice(tmp_path):
+    def mutate(d):
+        d["resetGroups"][0]["members"].append("och0")
+    assert reasons3(variant(tmp_path, mutate, source=V3)) == [
+        "schema system-3: resetGroups[0].members: item 3 repeats an earlier item"]
+
+
+def test_a_reset_group_missing_in_the_resolved_netlist(tmp_path):
+    assert reasons3(variant(tmp_path, lambda d: d["resolved"].pop("resetGroups"), source=V3)) == [
+        "the reset group pipe (prst0.RstOut) is not in the resolved netlist with this source; save the system in the "
+        "Composer"]
+
+
+def test_a_reset_group_with_another_source_in_the_resolved_netlist(tmp_path):
+    def mutate(d):
+        d["resolved"]["resetGroups"][0]["source"] = "edac0.RstOut"
+    assert reasons3(variant(tmp_path, mutate, source=V3)) == [
+        "the reset group pipe (prst0.RstOut) is not in the resolved netlist with this source; save the system in the "
+        "Composer"]
+
+
+def test_a_reset_group_only_in_the_resolved_netlist(tmp_path):
+    def mutate(d):
+        d["resolved"]["resetGroups"].append({**d["resolved"]["resetGroups"][0], "group": "other"})
+    assert reasons3(variant(tmp_path, mutate, source=V3)) == [
+        "the resolved netlist has the reset group other, which the system does not define; save the system in the "
+        "Composer"]
+
+
+def test_a_package_without_the_schema_of_version_3(tmp_path):
+    schemas = tmp_path / "schema"
+    schemas.mkdir()
+    for n in ("system-1.json", "system-2.json"):
+        shutil.copy(SCHEMAS / n, schemas / n)
+    assert reasons3(V3, schema_dir=schemas) == [
+        "formatVersion 3 needs the schema system-3.json, which this package does not carry (the website commit of its "
+        "lock manifest predates it)"]
+    assert load(schema_dir=schemas).entity == "spw_rmap_node"
 
 
 def test_a_schema_violation(tmp_path):
@@ -182,11 +260,23 @@ def _variants():
     yield "bool for integer", lambda d: d["resolved"].update(version=True)
 
 
-@pytest.mark.parametrize("name, mutate", list(_variants()))
-def test_the_validator_agrees_with_the_reference(name, mutate):
+def _variants3():
+    yield "example", lambda d: None
+    yield "no reset group", lambda d: d.update(resetGroups=[])
+    yield "no member", lambda d: d["resetGroups"][0].update(members=[])
+    yield "member twice", lambda d: d["resetGroups"][0]["members"].append("och0")
+    yield "member instance.port", lambda d: d["resetGroups"][0]["members"].append("och0.Rst")
+    yield "source without interface", lambda d: d["resetGroups"][0].update(source="prst0")
+    yield "unknown key in a group", lambda d: d["resetGroups"][0].update(extra=1)
+    yield "wrong const", lambda d: d.update(formatVersion=2)
+
+
+@pytest.mark.parametrize("version, name, mutate", [(1, n, m) for n, m in _variants()]
+                         + [(3, n, m) for n, m in _variants3()])
+def test_the_validator_agrees_with_the_reference(version, name, mutate):
     ref = pytest.importorskip("jsonschema")
-    schema = json.loads((SCHEMAS / "system-1.json").read_text(encoding="utf-8"))
-    data = copy.deepcopy(DATA)
+    schema = json.loads((SCHEMAS / f"system-{version}.json").read_text(encoding="utf-8"))
+    data = copy.deepcopy(DATA if version == 1 else DATA3)
     mutate(data)
     ours = jsonschema.validate(data, schema)
     theirs = list(ref.Draft202012Validator(schema).iter_errors(data))
@@ -201,6 +291,12 @@ def test_the_validator_agrees_with_the_reference(name, mutate):
     ({"exclusiveMinimum": 0}, 0, False),
     ({"maxLength": 2}, "abc", False),
     ({"minItems": 1}, [], False),
+    ({"uniqueItems": True}, ["a", "b"], True),
+    ({"uniqueItems": True}, ["a", "b", "a"], False),
+    ({"uniqueItems": True}, [1, 1.0], False),
+    ({"uniqueItems": True}, [True, 1], True),
+    ({"uniqueItems": True}, [{"a": [1], "b": 2}, {"b": 2, "a": [1]}], False),
+    ({"uniqueItems": False}, [1, 1], True),
     ({"pattern": "^v[0-9]$"}, "v1", True),
     ({"pattern": "^v[0-9]$"}, "x", False),
     ({"propertyNames": {"pattern": "^[a-z]+$"}}, {"Ab": 1}, False),

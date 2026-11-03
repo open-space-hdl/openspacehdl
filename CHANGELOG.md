@@ -2,6 +2,16 @@
 
 All notable changes of the package. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+### Added
+
+- Composer system files of `formatVersion` 3 (reset groups, Composer 0.10.0-beta): `new` and `update` check them
+  against `system-3.json` and refuse a reset group that the resolved netlist does not have with the same source; the
+  checked system carries the reset groups (`openspacehdl.composer.ResetGroup`), and the header of the generated
+  harness names them. `tools/lock.py` takes every `system-<n>.json` of the website commit. The JSON Schema validator
+  of the package supports `uniqueItems`.
+
 ## 0.1.0 - 2026-10-31
 
 ### Added

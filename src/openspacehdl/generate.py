@@ -446,6 +446,8 @@ def harness(system: System, head: str, plan: _bench.Plan | None = None) -> str:
              f"--   {e}",
              "-- the system with its clocks, its reset and a bench component of osh_tb at every external interface;",
              "-- inputs that no component drives are held idle.",
+             *[f"-- Reset group {g.id}: {g.source} (clock domain {g.domain}) resets {', '.join(g.members)} inside the "
+               f"system." for g in system.reset_groups],
              f"entity {e}_th is",
              f"end entity {e}_th;", "",
              f"architecture sim of {e}_th is", ""]
