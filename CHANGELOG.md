@@ -12,6 +12,11 @@ All notable changes of the package. Versions follow [semantic versioning](https:
   harness names them. `tools/lock.py` takes every `system-<n>.json` of the website commit. The JSON Schema validator
   of the package supports `uniqueItems`.
 
+### Changed
+
+- The portal pins follow the releases of the cores on Open Logic FT 4.8.0-ft.2, whose documentation sites build
+  with Markdown 3.11.3 (OpenWire and OpenCrypto also with selectolax 1.0.0, their own pin).
+
 ## 0.1.1 - 2026-11-18
 
 A hotfix release: the package carries reference-systems v0.2.1 in place of v0.2.0. Every other pin is that of 0.1.0:
