@@ -2,7 +2,10 @@
 
 All notable changes of the package. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.2.0 - 2026-11-19
+
+The package carries the cores on Open Logic FT 4.8.0-ft.2 and reference-systems v0.3.0, whose systems have a
+pipeline reset: their Composer files have `formatVersion` 3 with a reset group.
 
 ### Added
 
@@ -10,12 +13,20 @@ All notable changes of the package. Versions follow [semantic versioning](https:
   against `system-3.json` and refuse a reset group that the resolved netlist does not have with the same source; the
   checked system carries the reset groups (`openspacehdl.composer.ResetGroup`), and the header of the generated
   harness names them. `tools/lock.py` takes every `system-<n>.json` of the website commit. The JSON Schema validator
-  of the package supports `uniqueItems`.
+  of the package supports `uniqueItems`. The wheel carries `system-3.json` of the website commit of its lock.
 
 ### Changed
 
+- The lock takes the website commit of the catalog with the releases of the cores on Open Logic FT 4.8.0-ft.2, the
+  fault-tolerant fork based on Open Logic 4.8.0 (was 4.7.0-ft.11): OpenWire v0.1.1 (was v0.1.0), OpenRMAP v0.1.2
+  (was v0.1.1), OpenSPP v0.2.1 (was v0.1.0), OpenFibre v0.1.5 (was v0.1.4), OpenCrypto v0.1.1 (was v0.1.0) and
+  OpenCompact v0.3.2 (was v0.3.0). UVVM is unchanged. The changes of each core are in its own changelog.
+- reference-systems v0.3.0 (was v0.2.1): the pipeline reset in all three systems, a reset controller on the
+  AXI4-Lite decoder that resets the processing path on command over RMAP with the link up (the reset group `pipe`
+  of the Composer file), its hardware tests TC-RS-HW-19 to 23, and every core on Open Logic FT 4.8.0-ft.2. The HDL
+  changes: a device image built from 0.1.x does not serve 0.2.0.
 - The portal pins follow the releases of the cores on Open Logic FT 4.8.0-ft.2, whose documentation sites build
-  with Markdown 3.11.3 (OpenWire and OpenCrypto also with selectolax 1.0.0, their own pin).
+  with Markdown 3.11.3 (OpenWire, OpenSPP and OpenCrypto also with selectolax 1.0.0, their own pin).
 
 ## 0.1.1 - 2026-11-18
 
