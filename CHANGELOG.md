@@ -2,6 +2,26 @@
 
 All notable changes of the package. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.1 - 2026-11-18
+
+A hotfix release: the package carries reference-systems v0.2.1 in place of v0.2.0. Every other pin is that of 0.1.0:
+the website commit of the catalog, the cores, Open Logic FT and UVVM.
+
+### Changed
+
+- reference-systems v0.2.1, a hotfix of its hardware test software after the first lab run of spfi_compress:
+  - no operator step: TC-RS-HW-12 resets the link of the STAR-Ultra through the library of the STAR-Ultra PCIe
+    Interface (`--far-end-port`, default 1);
+  - after a failure the run goes on with a recovery (`--stop-at-first-failure` keeps the old behaviour);
+  - a quiet `run.log`, one event per wait, failures with register and field names and the state of the system
+    after a failure;
+  - the rate of TC-RS-HW-09 from the transfer alone;
+  - `--image` records the device image, and the report counts the results.
+
+  Its HDL, Composer files and cores are those of v0.2.0: a device image built from 0.1.0 stays valid. On the test
+  computer the far-end software now includes the Python package of the STAR-Ultra PCIe Interface;
+  `--check-environment` reports it.
+
 ## 0.1.0 - 2026-10-31
 
 ### Added
