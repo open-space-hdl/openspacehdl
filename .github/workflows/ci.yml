@@ -15,8 +15,8 @@ env:
   # The inputs of the lock manifest of the jobs package and systems (docs/design.md, section 3): the website commit of
   # the Composer catalog and a release tag of reference-systems whose tools/composer_ref.txt names that commit; the
   # lock waives no rule.
-  SITE_COMMIT: d7360631661d0ab382f65a729982332e16665320
-  REFSYS_TAG: v0.2.1
+  SITE_COMMIT: 69524138cb2b5886e2149b7fde482fc4097d18e9
+  REFSYS_TAG: v0.3.0
 
 # A new head of a pull request cancels the run of the previous one
 concurrency:
