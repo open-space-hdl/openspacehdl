@@ -27,6 +27,8 @@ pipeline reset: their Composer files have `formatVersion` 3 with a reset group.
   changes: a device image built from 0.1.x does not serve 0.2.0.
 - The portal pins follow the releases of the cores on Open Logic FT 4.8.0-ft.2, whose documentation sites build
   with Markdown 3.11.3 (OpenWire, OpenSPP and OpenCrypto also with selectolax 1.0.0, their own pin).
+- Composer generator 0.11.3-beta (website 6952413, catalog 75afe851b7e7) is a tested generator, on the evidence
+  of the CI job `systems`.
 
 ## 0.1.1 - 2026-11-18
 
