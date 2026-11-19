@@ -25,13 +25,13 @@ def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def make_lock(files=None):
-    """A lock manifest with the pins of the example."""
+def make_lock(files=None, data=DATA):
+    """A lock manifest with the pins of the example (or of data)."""
     cores, olo = [], None
-    for c in DATA["resolved"]["compile"]:
+    for c in data["resolved"]["compile"]:
         if c["library"] == "olo":
             olo = c
-        elif c["library"] != E:
+        elif c["library"] != data["resolved"]["entity"]:
             cores.append({"id": c["library"], "name": c["library"].title(),
                           "repository": f"open-space-hdl/{c['source']}",
                           "tag": "v0.1.0", "commit": c["commit"], "library": c["library"],
@@ -127,6 +127,17 @@ def test_the_harness(proj):
     assert "    Clk_sys <= not Clk_sys after C_CLK_SYS_PERIOD / 2;" in th
     assert re.search(r"signal spw_reg_S_AxiLite_AwAddr +: std_logic_vector\(7 downto 0\) := \(others => '0'\);", th)
     assert re.search(r"signal spw_reg_S_AxiLite_AwReady +: std_logic;$", th, re.M)
+    assert "Reset group" not in th
+
+
+def test_the_harness_names_the_reset_groups(tmp_path):
+    source = FIX / "spw_compression_node_pipeline_reset" / "spw_compression_node_pipeline_reset.composer.json"
+    data = json.loads(source.read_text(encoding="utf-8"))
+    system = project.new(source, tmp_path / "p", lock=make_lock(data=data), schema_dir=SCHEMAS)
+    assert [g.id for g in system.reset_groups] == ["pipe"]
+    th = (tmp_path / "p" / "sim" / "tb" / "spw_compression_node_pipeline_reset_th.vhd").read_text(encoding="utf-8")
+    assert ("-- Reset group pipe: prst0.RstOut (clock domain sys) resets och0, frm0, ocr0 inside the system."
+            in th.splitlines())
 
 
 def test_new_refuses_a_directory_with_content(tmp_path):

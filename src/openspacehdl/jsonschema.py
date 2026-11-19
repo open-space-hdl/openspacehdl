@@ -1,8 +1,8 @@
 """A small validator for the JSON Schema 2020-12 keywords the schemas of the Composer use.
 
 Supported: type (one or a list), properties, required, additionalProperties (true, false or a schema), items,
-propertyNames, enum, const, minimum, maximum, exclusiveMinimum, maxLength, minItems, pattern, oneOf and $ref to the
-$defs of the same document. Annotations (title, description, format, $id, $schema) are ignored. Any other keyword
+propertyNames, enum, const, minimum, maximum, exclusiveMinimum, maxLength, minItems, uniqueItems, pattern, oneOf and
+$ref to the $defs of the same document. Annotations (title, description, format, $id, $schema) are ignored. Any other keyword
 is an error of the schema, so that a newer schema is not checked half.
 """
 
@@ -12,7 +12,8 @@ import re
 
 ANNOTATIONS = {"$schema", "$id", "title", "description", "format", "$comment", "default", "examples"}
 SUPPORTED = {"type", "properties", "required", "additionalProperties", "items", "propertyNames", "enum", "const",
-             "minimum", "maximum", "exclusiveMinimum", "maxLength", "minItems", "pattern", "oneOf", "$ref", "$defs"}
+             "minimum", "maximum", "exclusiveMinimum", "maxLength", "minItems", "uniqueItems", "pattern", "oneOf",
+             "$ref", "$defs"}
 TYPES = {
     "object": lambda v: isinstance(v, dict),
     "array": lambda v: isinstance(v, list),
@@ -30,6 +31,19 @@ class SchemaError(Exception):
 
 def _path(path: str) -> str:
     return path or "(root)"
+
+
+def _key(v):
+    """A hashable form of a JSON value with the equality of JSON Schema: true is not 1, 1 is 1.0."""
+    if isinstance(v, bool):
+        return ("boolean", v)
+    if isinstance(v, (int, float)):
+        return ("number", v)
+    if isinstance(v, list):
+        return ("array", tuple(_key(x) for x in v))
+    if isinstance(v, dict):
+        return ("object", tuple(sorted((k, _key(x)) for k, x in v.items())))
+    return (type(v).__name__, v)
 
 
 def validate(instance, schema: dict, max_errors: int = 20) -> list[str]:
@@ -75,6 +89,12 @@ def validate(instance, schema: dict, max_errors: int = 20) -> list[str]:
         if isinstance(value, list):
             if "minItems" in s and len(value) < s["minItems"]:
                 errors.append(f"{_path(path)}: fewer than {s['minItems']} items")
+            if s.get("uniqueItems") is True:
+                seen = set()
+                for i, item in enumerate(value):
+                    if _key(item) in seen:
+                        errors.append(f"{_path(path)}: item {i} repeats an earlier item")
+                    seen.add(_key(item))
             if "items" in s:
                 for i, item in enumerate(value):
                     errors += check(item, s["items"], f"{path}[{i}]")
