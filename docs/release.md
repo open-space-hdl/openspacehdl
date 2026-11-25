@@ -13,7 +13,8 @@ section 3). A release branch starts only when:
 - reference-systems has a release tag whose submodules carry the catalog pins (rule L2) and whose
   `tools/composer_ref.txt` names the website commit of the lock (rule L4). For 0.1.0 this is reference-systems
   v0.2.0 (open point O2), for the hotfix 0.1.1 reference-systems v0.2.1 (its HDL and pins are those of v0.2.0),
-  for 0.2.0 reference-systems v0.3.0;
+  for 0.2.0 reference-systems v0.3.0, for the hotfix 0.2.1 reference-systems v0.3.1 (its HDL and pins are those of
+  v0.3.0);
 - `python tools/lock.py --site <website> --site-commit <commit of composer_ref.txt> --refsys <reference-systems>
   --refsys-tag <tag> --repos <dir> --report` lists no violation, with clones that have the tags of their remotes;
 - the generator version of the Composer at that website commit is in `TESTED_GENERATORS`
