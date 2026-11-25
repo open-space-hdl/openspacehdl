@@ -2,6 +2,21 @@
 
 All notable changes of the package. Versions follow [semantic versioning](https://semver.org).
 
+## 0.2.1 - 2026-11-25
+
+A hotfix release: the package carries reference-systems v0.3.1 in place of v0.3.0. Every other pin is that of 0.2.0:
+the website commit of the catalog, the cores, Open Logic FT and UVVM.
+
+### Changed
+
+- reference-systems v0.3.1, a hotfix of the hardware test software of spfi_compress after the lab run of 0.2.0:
+  TC-RS-HW-12 (far-end link reset) accepts what a restart of the link moves by design: one expiry of the alignment
+  watchdog of OpenFibre during the link start (`ML_ALIGN_TIMEOUTS`) and the cause of a retry (`CRC16`, `CRC8`,
+  `FRAME` or `SEQUENCE` of `DL_ERRORS` with its counter), the cause only when `DL_ERRORS` held it when the link was
+  back, before the images. TC-RS-HW-13 (lane removal) accepts the sequence error of the realignment with its retry.
+
+  Its HDL, Composer files and cores are those of v0.3.0: a device image built from 0.2.0 stays valid.
+
 ## 0.2.0 - 2026-11-19
 
 The package carries the cores on Open Logic FT 4.8.0-ft.2 and reference-systems v0.3.0, whose systems have a
