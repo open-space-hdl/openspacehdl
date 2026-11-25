@@ -16,7 +16,7 @@ env:
   # the Composer catalog and a release tag of reference-systems whose tools/composer_ref.txt names that commit; the
   # lock waives no rule.
   SITE_COMMIT: 69524138cb2b5886e2149b7fde482fc4097d18e9
-  REFSYS_TAG: v0.3.0
+  REFSYS_TAG: v0.3.1
 
 # A new head of a pull request cancels the run of the previous one
 concurrency:
