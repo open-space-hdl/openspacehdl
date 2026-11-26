@@ -2,8 +2,9 @@ name: Release
 
 # Uploads the wheel of a GitHub release to PyPI through Trusted Publishing (docs/release.md, section 5). The workflow
 # does not build: the wheel the release evidence was taken on is an asset of the GitHub release, and the job check
-# compares it with the tag before anything is uploaded. The job publish waits in the environment pypi until the
-# maintainer approves it, and it is the only job of the repository that can request an OIDC token.
+# compares it with the tag before anything is uploaded. Publishing the GitHub release is the release decision: the
+# job publish runs in the environment pypi, which accepts deployments from tags v* only, and it is the only job of
+# the repository that can request an OIDC token.
 
 on:
   release:
@@ -114,7 +115,7 @@ jobs:
             echo "| Size | $size bytes |"
             echo "| SHA-256 | \`$sha256\` |"
             echo
-            echo "Compare the SHA-256 with the release report before approving the job publish."
+            echo "The job publish uploads this file."
           } >> "$GITHUB_STEP_SUMMARY"
 
   publish:
@@ -129,7 +130,7 @@ jobs:
       id-token: write
     steps:
       # The wheel comes from the release again, not from the job check: the upload is the file whose SHA-256 the job
-      # check reported and the maintainer approved.
+      # check reported.
       - name: Download the wheel and compare it with the checked one
         env:
           GH_TOKEN: ${{ github.token }}

@@ -678,7 +678,7 @@ request (open point O6). Phase A is complete when every level passes.
 - The move of the tools and the board data of reference-systems into the package; reference-systems becomes their
   first consumer later. The move starts after the hardware bring-up of the reference systems.
 - Publishing through GitHub Actions with Trusted Publishing. The workflow `release.yml` uploads the tested wheel of a
-  published GitHub release after the maintainer approves the run; it does not build (release checklist,
+  published GitHub release when the maintainer publishes the release; it does not build (release checklist,
   [release.md](release.md), section 5).
 
 ### 10.1 Board targets (phase B)

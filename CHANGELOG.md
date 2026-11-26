@@ -6,11 +6,11 @@ All notable changes of the package. Versions follow [semantic versioning](https:
 
 ### Added
 
-- Publishing through Trusted Publishing: the workflow `release.yml` uploads the wheel of a published GitHub release to
-  PyPI after the maintainer approves the run in the environment `pypi`. It does not build; it checks the tag, the
-  files of the release, the SHA-256, the metadata version and the file limit before the upload, and the upload
-  carries a digital attestation (PEP 740). A test keeps it the only workflow that can request an OIDC token, without a
-  checkout in its publishing job and with every action pinned to a commit (release checklist, section 5).
+- Publishing through Trusted Publishing: the workflow `release.yml` uploads the wheel of a GitHub release to PyPI
+  when the maintainer publishes the release (environment `pypi`, tags `v*` only). It does not build; it checks the
+  tag, the files of the release, the SHA-256, the metadata version and the file limit before the upload, and the
+  upload carries a digital attestation (PEP 740). A test keeps it the only workflow that can request an OIDC token,
+  without a checkout in its publishing job and with every action pinned to a commit (release checklist, section 5).
 
 ## 0.2.1 - 2026-11-25
 

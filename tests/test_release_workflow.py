@@ -57,7 +57,7 @@ def test_the_job_check_reads_only_and_skips_pre_releases():
     assert steps_using(check) == []
 
 
-def test_the_job_publish_waits_in_the_environment_pypi_and_never_checks_out():
+def test_the_job_publish_runs_in_the_environment_pypi_and_never_checks_out():
     publish = release()["jobs"]["publish"]
     assert publish["needs"] == "check"
     assert publish["environment"]["name"] == "pypi"
