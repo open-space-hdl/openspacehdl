@@ -1,0 +1,149 @@
+name: Release
+
+# Uploads the wheel of a GitHub release to PyPI through Trusted Publishing (docs/release.md, section 5). The workflow
+# does not build: the wheel the release evidence was taken on is an asset of the GitHub release, and the job check
+# compares it with the tag before anything is uploaded. The job publish waits in the environment pypi until the
+# maintainer approves it, and it is the only job of the repository that can request an OIDC token.
+
+on:
+  release:
+    types: [published]
+  # Fallback when the release event did not start a run, on the tag: gh workflow run release.yml --ref v<version>
+  # -f tag=v<version>
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of the GitHub release (v<version>)
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  # The PyPI file limit of the project in bytes: [tool.openspacehdl] pypi-file-limit-mb of pyproject.toml, in MiB
+  # (rule L9 of docs/design.md)
+  FILE_LIMIT_BYTES: 104857600
+
+jobs:
+  check:
+    name: Check the wheel of the release
+    # pre-releases (release candidates) are never uploaded to PyPI
+    if: github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      wheel: ${{ steps.check.outputs.wheel }}
+      sha256: ${{ steps.check.outputs.sha256 }}
+    steps:
+      - name: Download the assets and check them against the tag
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          # a final version only: v<major>.<minor>.<patch>
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "tag '$TAG' is not v<major>.<minor>.<patch>"
+          version="${TAG#v}"
+          wheel="openspacehdl-${version}-py3-none-any.whl"
+          if [ "$EVENT" = workflow_dispatch ] && [ "$REF" != "refs/tags/$TAG" ]; then
+            fail "run the workflow on the tag: --ref $TAG (it ran on $REF)"
+          fi
+
+          # a published release that is not a pre-release, with exactly the wheel and SHA256SUMS
+          state=$(gh release view "$TAG" --json isDraft,isPrerelease -q '"\(.isDraft) \(.isPrerelease)"')
+          [ "$state" = "false false" ] || fail "release $TAG: draft and pre-release must both be false (got $state)"
+          assets=$(gh release view "$TAG" --json assets -q '[.assets[].name] | sort | join(" ")')
+          [ "$assets" = "SHA256SUMS $wheel" ] || fail "release $TAG must carry exactly SHA256SUMS and $wheel (got: $assets)"
+
+          # the tag is on main
+          tag_sha=$(gh api "repos/$GH_REPO/commits/$TAG" -q .sha)
+          relation=$(gh api "repos/$GH_REPO/compare/main...$tag_sha" -q .status)
+          case "$relation" in
+            identical|behind) ;;
+            *) fail "the commit $tag_sha of $TAG is not on main (compare: $relation)" ;;
+          esac
+
+          mkdir dist
+          gh release download "$TAG" --dir dist
+          cd dist
+          # SHA256SUMS names the wheel and nothing else, and its hash matches the file
+          [ "$(wc -l < SHA256SUMS)" -eq 1 ] || fail "SHA256SUMS must have exactly one line"
+          read -r sum_hash sum_name < SHA256SUMS
+          [[ "$sum_hash" =~ ^[0-9a-f]{64}$ ]] || fail "SHA256SUMS: '$sum_hash' is not a SHA-256"
+          [ "${sum_name#\*}" = "$wheel" ] || fail "SHA256SUMS names '$sum_name', not $wheel"
+          sha256sum --check --strict SHA256SUMS || fail "the SHA-256 of $wheel differs from SHA256SUMS"
+          sha256=$(sha256sum "$wheel" | cut -d' ' -f1)
+
+          # the version inside the wheel equals the tag
+          unzip -Z1 "$wheel" > "$RUNNER_TEMP/files"
+          meta=$(grep -E '^openspacehdl-[^/]+\.dist-info/METADATA$' "$RUNNER_TEMP/files") || fail "no METADATA in $wheel"
+          [ "$(printf '%s\n' "$meta" | wc -l)" -eq 1 ] || fail "more than one METADATA in $wheel"
+          unzip -p "$wheel" "$meta" | tr -d '\r' > "$RUNNER_TEMP/METADATA"
+          name_line=$(grep -m1 '^Name: ' "$RUNNER_TEMP/METADATA") || fail "METADATA has no Name"
+          version_line=$(grep -m1 '^Version: ' "$RUNNER_TEMP/METADATA") || fail "METADATA has no Version"
+          [ "$name_line" = "Name: openspacehdl" ] || fail "METADATA: '$name_line'"
+          [ "$version_line" = "Version: $version" ] || fail "METADATA: '$version_line', the tag is $TAG"
+
+          # rule L9: below the PyPI file limit of the project
+          size=$(stat -c %s "$wheel")
+          [ "$size" -lt "$FILE_LIMIT_BYTES" ] || fail "$wheel has $size bytes, the limit is $FILE_LIMIT_BYTES"
+
+          {
+            echo "version=$version"
+            echo "wheel=$wheel"
+            echo "sha256=$sha256"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Wheel of $TAG"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Commit | \`$tag_sha\` (on main) |"
+            echo "| File | \`$wheel\` |"
+            echo "| Size | $size bytes |"
+            echo "| SHA-256 | \`$sha256\` |"
+            echo
+            echo "Compare the SHA-256 with the release report before approving the job publish."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Upload to PyPI
+    needs: check
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/openspacehdl/${{ needs.check.outputs.version }}/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # The wheel comes from the release again, not from the job check: the upload is the file whose SHA-256 the job
+      # check reported and the maintainer approved.
+      - name: Download the wheel and compare it with the checked one
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          WHEEL: ${{ needs.check.outputs.wheel }}
+          SHA256: ${{ needs.check.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          mkdir dist
+          gh release download "$TAG" --pattern "$WHEEL" --dir dist
+          [ "$(ls dist)" = "$WHEEL" ]
+          echo "$SHA256  dist/$WHEEL" | sha256sum --check --strict
+
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
+        with:
+          print-hash: true

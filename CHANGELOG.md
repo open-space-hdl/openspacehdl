@@ -2,6 +2,16 @@
 
 All notable changes of the package. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+### Added
+
+- Publishing through Trusted Publishing: the workflow `release.yml` uploads the wheel of a published GitHub release to
+  PyPI after the maintainer approves the run in the environment `pypi`. It does not build; it checks the tag, the
+  files of the release, the SHA-256, the metadata version and the file limit before the upload, and the upload
+  carries a digital attestation (PEP 740). A test keeps it the only workflow that can request an OIDC token, without a
+  checkout in its publishing job and with every action pinned to a commit (release checklist, section 5).
+
 ## 0.2.1 - 2026-11-25
 
 A hotfix release: the package carries reference-systems v0.3.1 in place of v0.3.0. Every other pin is that of 0.2.0:
