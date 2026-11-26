@@ -98,10 +98,11 @@ evidence of sections 3 and 4 was taken on.
    - the wheel stays below the file limit of the project on PyPI (rule L9, 100 MiB by default).
 
    The summary of the run lists the commit, the size and the SHA-256 of the wheel.
-3. The job `publish` waits in the environment `pypi` until the maintainer approves it (the run, then Review
-   deployments). Before the approval, the maintainer compares the SHA-256 in the summary with the wheel of section 4.
-   The job downloads the wheel again, checks that it is the file the job `check` reported, and uploads it with
-   `pypa/gh-action-pypi-publish`, which also publishes a digital attestation of the file (PEP 740).
+3. The job `publish` follows in the environment `pypi`, which accepts deployments from tags `v*` only. It downloads
+   the wheel again, checks that it is the file the job `check` reported, and uploads it with
+   `pypa/gh-action-pypi-publish`, which also publishes a digital attestation of the file (PEP 740). Publishing the
+   GitHub release is therefore the release decision: the maintainer publishes it once the evidence of sections 3
+   and 4 is complete and the SHA-256 of the wheel to upload is the one of section 4.
 4. After the upload, the SHA-256 of the wheel on PyPI equals the local file, and fresh virtual environments of both
    Python versions install the version from PyPI and run `openspacehdl --version`, `info` and `lock`.
 
@@ -115,8 +116,8 @@ The one-time setup of the route:
 - PyPI, project openspacehdl, Publishing: a trusted publisher of type GitHub with the owner `open-space-hdl`, the
   repository `openspacehdl`, the workflow `release.yml` and the environment `pypi`. Renaming the workflow file needs
   the same change on PyPI.
-- GitHub, settings of the repository: the environment `pypi` with the maintainer as required reviewer, deployments
-  only from tags `v*`, no secrets; a ruleset that lets only administrators create, move or delete tags `v*`.
+- GitHub, settings of the repository: the environment `pypi` with deployments only from tags `v*`, no required
+  reviewer and no secrets.
 
 The Lab level runs once more on the version from PyPI:
 a fresh virtual environment, `pip install openspacehdl==<version>`, then the export and the hardware test commands of
