@@ -677,8 +677,9 @@ request (open point O6). Phase A is complete when every level passes.
 - `serve` on another address than 127.0.0.1, and any authentication.
 - The move of the tools and the board data of reference-systems into the package; reference-systems becomes their
   first consumer later. The move starts after the hardware bring-up of the reference systems.
-- Publishing through GitHub Actions with Trusted Publishing. The repository is public; the publishing workflow and the
-  trusted publisher on PyPI come later, with the maintainer.
+- Publishing through GitHub Actions with Trusted Publishing. The workflow `release.yml` uploads the tested wheel of a
+  published GitHub release after the maintainer approves the run; it does not build (release checklist,
+  [release.md](release.md), section 5).
 
 ### 10.1 Board targets (phase B)
 
